@@ -1,7 +1,5 @@
-# Publishes site/ two ways:
-#  1. pushes the built site to the `gh-pages` branch (Settings -> Pages -> Deploy from a branch: gh-pages / root)
-#     - no environment protection rules involved, works with the default GITHUB_TOKEN;
-#  2. optionally also deploys through the Pages "GitHub Actions" source (non-blocking).
+# Publishes site/ by pushing the built site to the `gh-pages` branch
+# (Settings -> Pages -> Deploy from a branch: gh-pages / root). No environment rules involved.
 name: deploy
 on:
   push:
@@ -44,17 +42,3 @@ jobs:
           git add -A
           git commit -q -m "site build $(date -u +%Y-%m-%dT%H:%MZ) from ${GITHUB_SHA::7}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-  deploy-actions-source:
-    # only succeeds when Pages source is "GitHub Actions" and the environment allows this branch
-    needs: build
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
