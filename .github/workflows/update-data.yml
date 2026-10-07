@@ -52,15 +52,14 @@ jobs:
         run: |
           python -m chem_monitor.notify /tmp/prev/summary.json site/data/hacid/summary.json \
             site/data/hacid/inflections.json site/data/sources.json /tmp/digest.md
+          n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Daily H-Acid updates"' --json number --jq '.[0].number')
+          if [ -z "$n" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Daily H-Acid updates" \
+              --body "@$OWNER The monitor runs every day and comments here whenever the H-Acid price, cycle state, drivers or a data source change. GitHub e-mails you each comment. Live site: https://arhamsaraogi-star.github.io/chemical/"
+            n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Daily H-Acid updates"' --json number --jq '.[0].number')
+          fi
           if [ -s /tmp/digest.md ]; then
             printf '\n\n@%s' "$OWNER" >> /tmp/digest.md
-            n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Daily H-Acid updates"' --json number --jq '.[0].number')
-            if [ -z "$n" ]; then
-              gh label create updates --repo "$GITHUB_REPOSITORY" --color 1f6feb --force >/dev/null 2>&1 || true
-              gh issue create --repo "$GITHUB_REPOSITORY" --title "Daily H-Acid updates" --label updates \
-                --body "The monitor comments here whenever the price, cycle state, drivers or data sources change. Subscribe to get e-mails."
-              n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Daily H-Acid updates"' --json number --jq '.[0].number')
-            fi
             gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body-file /tmp/digest.md
           fi
       - name: Commit data snapshot if changed
