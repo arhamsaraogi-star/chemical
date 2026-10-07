@@ -146,40 +146,59 @@ class BaiinfoWaybackCollector(Collector):
         self.pages, self.start, self.max_per_page, self.delay = pages, start, max_per_page, delay
 
     def snapshots(self, path):
+        """One capture per day. CDX first; if CDX is unreachable, fall back to the 'available' API
+        probed weekly (closest capture to each date)."""
         out = []
         for host in ("www.baiinfo.com", "baiinfo.com", "www.baiinfo.com.cn"):
             q = (f"{self.CDX}?url={host}/{path}&output=json&from={self.start}&fl=timestamp,original,digest"
                  "&filter=statuscode:200&collapse=digest")
             try:
                 js = http_get(q, timeout=90, delay=self.delay).json()
-            except Exception:                      # noqa: BLE001 - archive hiccups are normal
-                continue
-            out += [tuple(r) for r in js[1:]]
+                out += [tuple(r[:2]) for r in js[1:]]
+            except Exception as e:                 # noqa: BLE001 - archive hiccups are normal
+                print(f"[wayback] CDX failed for {host}/{path}: {e}", flush=True)
+        if not out:
+            for d in pd.date_range(self.start, pd.Timestamp.today(), freq="7D"):
+                try:
+                    js = http_get(f"https://archive.org/wayback/available?url=www.baiinfo.com/{path}"
+                                  f"&timestamp={d:%Y%m%d}", timeout=60, delay=self.delay).json()
+                    c = js.get("archived_snapshots", {}).get("closest")
+                    if c and c.get("status") == "200":
+                        out.append((c["timestamp"], c["url"].split("/", 5)[-1]))
+                except Exception:                  # noqa: BLE001
+                    continue
         seen, uniq = set(), []
-        for ts, orig, dig in sorted(out):
+        for ts, orig in sorted(out):
             if ts[:8] not in seen:
                 seen.add(ts[:8])
                 uniq.append((ts, orig))
+        print(f"[wayback] {path}: {len(uniq)} daily snapshots", flush=True)
         return uniq[-self.max_per_page:]
 
     def fetch(self, mode="backfill"):
         rows, errors = [], []
+        self.unparsed = 0
         for p in self.pages:
             for path in (p.path, *p.old_paths):
                 for ts, orig in self.snapshots(path):
                     url = f"https://web.archive.org/web/{ts}id_/{orig}"
                     cap = pd.Timestamp(ts[:8]) + pd.Timedelta(hours=int(ts[8:10] or 0) + 8)  # UTC->CST
                     try:
-                        parsed = parse_note(http_get(url, timeout=60, delay=self.delay).text, p, cap)
+                        html = http_get(url, timeout=60, delay=self.delay).text
+                        parsed = parse_note(html, p, cap)
                     except Exception as e:         # noqa: BLE001
                         errors.append(f"{ts} {p.series}: {e}")
                         continue
                     if parsed is None or parsed["obs_date"] > cap.normalize():
+                        self.unparsed += 1
+                        if self.unparsed <= 3:
+                            print(f"[wayback] unparsed {ts} {p.series}: {extract_note(page_text(html))[:160]!r}", flush=True)
                         continue
                     r = _row(p, parsed, f"https://web.archive.org/web/{ts}/{orig}", self.name,
                              "Internet Archive")
                     r["raw_text"] = f"[capture {ts}] " + r["raw_text"]
                     rows.append(r)
+            print(f"[wayback] {p.series}: {sum(1 for r in rows if r['series'] == p.series)} notes parsed", flush=True)
         df = pd.DataFrame(rows)
         df.attrs["errors"] = errors[:50]
         if df.empty:
