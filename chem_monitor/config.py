@@ -70,6 +70,8 @@ PRIOR_WEIGHTS = {
     "supply_disruption": .15, "capacity_utilization": .10, "inventory": .10,
     "feedstock_cost": .10, "downstream_dyes": .05, "export_data": .05, "events": .05,
 }
+# Series built FROM the target price (circular as "leading indicators") - excluded from lead/lag & hit rates
+ENDOGENOUS = {"hacid.spot", "derived.spread_idx", "derived.ratio_idx", "derived.margin_abs", "derived.margin_ratio"}
 # Columns where a *rise* is NOT bullish for price (used by lead-lag hit-rates)
 PRESSURE_SIGN = {"ind.inventory": -1, "ind.utilization": -1, "derived.eff_supply": -1, "derived.supply_index": -1}
 

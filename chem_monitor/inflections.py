@@ -94,7 +94,9 @@ def detect(price: pd.Series, rules=MOVE_RULES, gap=EPISODE_GAP, lookback=LOOKBAC
         pre30 = p[start] / base - 1 if pd.notna(base) else 0.0
         vol = p.pct_change(fill_method=None).iloc[max(1, i - 90): i + 1].std()
         nd = max(1, loc(end) - i)
-        z = abs(mag) / (vol * np.sqrt(nd) + 1e-9) if pd.notna(vol) else np.nan
+        # floor of 0.5%/day: a step series that is flat between sparse observations has ~zero
+        # measured volatility, which would make any move look infinitely significant
+        z = abs(mag) / (max(vol, 0.005) * np.sqrt(nd)) if pd.notna(vol) else np.nan
         if sign * pre30 >= 0.02:
             shape = "acceleration"            # already trending the same way
         elif pd.notna(z) and z >= 3:

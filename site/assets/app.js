@@ -138,7 +138,9 @@
     const today = S.generated_at ? S.generated_at.slice(0, 10) : null;
     main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } },
       h("div", {}, h("div", { class: "kicker" }, "H-Acid · China"), h("h1", {}, "Is a genuine chemical-cycle inflection developing?")),
-      h("div", { class: "small muted" }, (meta.chemicals || []).length + " chemical monitored")));
+      h("div", { class: "chem-strip", "aria-label": "Chemicals monitored" }, (meta.chemicals || []).map((c) =>
+        h("a", { class: "chem-chip" + (c.id === CHEM ? " on" : ""), href: "#/" }, h("span", { class: "dot", style: { background: STATE_COLOR[c.state] || "var(--muted)" } }),
+          c.name, h("b", {}, c.score === null || c.score === undefined ? "—" : String(Math.round(c.score))))))));
 
     // signal card
     const P = S.price || {};

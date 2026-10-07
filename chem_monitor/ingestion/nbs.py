@@ -31,7 +31,11 @@ def list_releases(max_pages=80, since="2023-09-01", delay=1.5):
     out, since = [], pd.Timestamp(since)
     for k in range(max_pages):
         url = LIST + ("index.html" if k == 0 else f"index_{k}.html")
-        html = http_get(url, delay=delay).text
+        try:
+            html = http_get(url, delay=delay).text
+        except Exception as e:                     # noqa: BLE001 - skip a flaky index page, keep walking
+            print(f"[nbs] index page {k} failed: {e}", flush=True)
+            continue
         s = BeautifulSoup(html, "lxml")
         oldest = None
         for a in s.find_all("a", href=True):
@@ -43,6 +47,8 @@ def list_releases(max_pages=80, since="2023-09-01", delay=1.5):
             full = href if href.startswith("http") else LIST + href.lstrip("./")
             out.append((end, full))
             oldest = end if oldest is None else min(oldest, end)
+        if k % 5 == 0:
+            print(f"[nbs] index page {k}: {len(out)} releases so far, oldest {oldest}", flush=True)
         if oldest is not None and oldest < since:
             break
     seen, uniq = set(), []
@@ -94,7 +100,9 @@ class NBSCollector(Collector):
         since = self.since if mode == "backfill" else (pd.Timestamp.today() - pd.Timedelta(days=75)).strftime("%Y-%m-%d")
         rels = list_releases(max_pages=80 if mode == "backfill" else 2, since=since, delay=self.delay)
         rows, errors = [], []
-        for end, url in rels:
+        for j, (end, url) in enumerate(rels):
+            if j % 20 == 0:
+                print(f"[nbs] release {j}/{len(rels)} ({end.date()})", flush=True)
             try:
                 rows += parse_release(http_get(url, delay=self.delay).text, end, url)
             except Exception as e:                 # noqa: BLE001

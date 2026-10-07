@@ -12,5 +12,33 @@
     "rows_total": 6,
     "status": "ok",
     "warnings": []
+  },
+  "comtrade": {
+    "failure_reason": null,
+    "last_attempt": "2026-10-07T07:39:37Z",
+    "last_observation_date": "2026-07-31",
+    "last_success": "2026-10-07T07:39:37Z",
+    "mode": "backfill",
+    "rows_fetched": 290,
+    "rows_new": 290,
+    "rows_rejected": [],
+    "rows_revised": 0,
+    "rows_total": 290,
+    "status": "ok",
+    "warnings": []
+  },
+  "nbs_10day": {
+    "failure_reason": null,
+    "last_attempt": "2026-10-07T07:05:36Z",
+    "last_observation_date": "2026-09-20",
+    "last_success": "2026-10-07T07:05:36Z",
+    "mode": "backfill",
+    "rows_fetched": 318,
+    "rows_new": 318,
+    "rows_rejected": [],
+    "rows_revised": 0,
+    "rows_total": 318,
+    "status": "ok",
+    "warnings": []
   }
 }

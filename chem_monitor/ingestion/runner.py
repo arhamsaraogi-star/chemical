@@ -134,6 +134,7 @@ def run_collector(c, mode="live", data_dir=DATA_DIR, now=None) -> dict:
         st.update({"status": "failed", "failure_reason": f"{type(e).__name__}: {e}"[:500]})
         if len(existing):
             st["last_observation_date"] = str(pd.to_datetime(existing["obs_date"]).max().date())
+    st_all = read_status(data_dir)           # re-read: another collector may have written meanwhile
     st_all[c.name] = st
     write_status(st_all, data_dir)
     return st

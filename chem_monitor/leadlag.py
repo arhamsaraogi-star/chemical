@@ -1,7 +1,7 @@
 """Leading-indicator research: which variables moved BEFORE the target?"""
 import numpy as np
 import pandas as pd
-from .config import LEAD_DAYS, PRESSURE_SIGN, TARGET
+from .config import LEAD_DAYS, PRESSURE_SIGN, TARGET, ENDOGENOUS
 from .features import change
 
 
@@ -16,7 +16,7 @@ def lead_lag_table(panel: pd.DataFrame, target=TARGET, lags_days=(0, 7, 14, 30, 
     y = ch[target]
     rows = []
     for c in ch.columns:
-        if c == target or ch[c].notna().sum() < 30:
+        if c == target or c in ENDOGENOUS or ch[c].notna().sum() < 30:
             continue
         for L in lags_days:
             k = int(round(L / 7))
@@ -53,7 +53,7 @@ def granger(panel: pd.DataFrame, target=TARGET, max_lag_weeks=8, freq="W-FRI"):
     y = ch[target]
     rows = []
     for c in ch.columns:
-        if c == target or ch[c].notna().sum() < 60:
+        if c == target or c in ENDOGENOUS or ch[c].notna().sum() < 60:
             continue
         df = pd.concat([y, ch[c]], axis=1).dropna()
         if len(df) < 60:
@@ -71,7 +71,7 @@ def granger(panel: pd.DataFrame, target=TARGET, max_lag_weeks=8, freq="W-FRI"):
 def inflection_hit_rates(panel, infls, variables=None, leads=LEAD_DAYS, z=1.0):
     """Share of inflections preceded (within `lead` days) by a >=z-sigma move of the variable in the
     bullish/bearish direction, vs the base rate on random dates. lift>1 => informative."""
-    variables = variables or [c for c in panel.columns if c != TARGET]
+    variables = variables or [c for c in panel.columns if c != TARGET and c not in ENDOGENOUS]
     rows = []
     for v in variables:
         s = panel[v].dropna()
