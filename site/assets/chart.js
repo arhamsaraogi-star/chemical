@@ -14,6 +14,7 @@
     return e;
   }
   const t = (s) => Date.parse(s + "T00:00:00Z");
+  const fmtIdx = (v) => String(Math.round(v));
   const fmtDate = (ms, opt) => new Date(ms).toLocaleDateString("en-GB", Object.assign({ timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }, opt || {}));
 
   function niceTicks(lo, hi, n) {
@@ -66,6 +67,27 @@
     }
     setRange(r) { this.range = r; this.zoom = null; this.render(); }
     setVisible(id, v) { const s = this.series.find((x) => x.id === id); if (s) { s.visible = v; this.render(); } }
+    setOption(k, v) { this.o[k] = v; this.render(); }
+    addSeries(s) {
+      if (this.series.find((x) => x.id === s.id)) return;
+      this.series.push(Object.assign({ visible: true, maxGapDays: 60 }, s, { pts: s.points.map((p) => [t(p[0]), p[1]]).sort((a, b) => a[0] - b[0]) }));
+      this.render();
+    }
+    removeSeries(id) { this.series = this.series.filter((x) => x.id !== id); this.render(); }
+    commonStart() {
+      // first date inside the view on which EVERY visible series has data
+      const [x0] = this.domainX();
+      let c = x0;
+      for (const s of this.series) if (s.visible && s.pts.length) c = Math.max(c, s.pts[0][0]);
+      return c;
+    }
+    view(s) {
+      // indexed mode: every series = 100 on the common start date, so different units share one axis
+      if (!this.o.indexed) return s.pts;
+      const b = this.valueAt(Object.assign({}, s, { maxGapDays: 1e9 }), this.commonStart());
+      if (!b || !b[1]) return s.pts;
+      return s.pts.map((p) => [p[0], 100 * p[1] / b[1]]);
+    }
     valueAt(s, x) {
       let lo = 0, hi = s.pts.length - 1, ans = -1;
       while (lo <= hi) { const m = (lo + hi) >> 1; if (s.pts[m][0] <= x) { ans = m; lo = m + 1; } else hi = m - 1; }
@@ -81,7 +103,9 @@
       const [x0, x1] = this.domainX();
       const vis = this.series.filter((s) => s.visible && s.pts.length);
       let ylo = Infinity, yhi = -Infinity;
-      for (const s of vis) {
+      const V = new Map(vis.map((s) => [s, Object.assign({}, s, { pts: this.view(s) })]));
+      for (const s0 of vis) {
+        const s = V.get(s0);
         const before = this.valueAt(s, x0);
         if (before) { ylo = Math.min(ylo, before[1]); yhi = Math.max(yhi, before[1]); }
         for (const p of s.pts) if (p[0] >= x0 && p[0] <= x1) { ylo = Math.min(ylo, p[1]); yhi = Math.max(yhi, p[1]); }
@@ -99,13 +123,13 @@
       for (const v of yt) {
         if (Y(v) < m.t - 1 || Y(v) > H - m.b + 1) continue;
         el("line", { class: "gridline", x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v) }, g);
-        const tx = el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, g); tx.textContent = this.o.yFormat(v);
+        const tx = el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, g); tx.textContent = this.o.indexed ? fmtIdx(v) : this.o.yFormat(v);
       }
       el("line", { class: "axis", x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b }, g);
       const tt = timeTicks(x0, x1, W - m.l - m.r);
       for (const v of tt.ticks) { const tx = el("text", { x: X(v), y: H - 8, "text-anchor": "middle" }, g); tx.textContent = tt.fmt(v); }
       // inflection bands
-      for (const mk of this.o.markers || []) {
+      for (const mk of this.o.showMarkers === false ? [] : (this.o.markers || [])) {
         const a = t(mk.start), b = t(mk.end);
         if (b < x0 || a > x1) continue;
         const xa = Math.max(m.l, X(a)), xb = Math.min(W - m.r, X(b));
@@ -118,7 +142,7 @@
         r.dataset.marker = mk.id;
       }
       // event ticks
-      for (const ev of this.o.events || []) {
+      for (const ev of this.o.showEvents === false ? [] : (this.o.events || [])) {
         const x = t(ev.date); if (x < x0 || x > x1) continue;
         el("line", { class: "marker-line", x1: X(x), x2: X(x), y1: H - m.b - 10, y2: H - m.b, stroke: "var(--ink-2)" }, g);
         el("circle", { cx: X(x), cy: H - m.b - 12, r: 3.5, fill: "var(--surface)", stroke: "var(--ink-2)", "stroke-width": 1.5 }, g);
@@ -127,7 +151,8 @@
       const clip = el("clipPath", { id: "c" + (this._id = this._id || Math.random().toString(36).slice(2)) }, this.svg);
       el("rect", { x: m.l, y: 0, width: W - m.l - m.r, height: H }, clip);
       const sg = el("g", { "clip-path": `url(#c${this._id})` }, this.svg);
-      for (const s of vis) {
+      for (const s0 of vis) {
+        const s = V.get(s0);
         let solid = "", dashed = "";
         const pts = s.pts;
         for (let i = 0; i < pts.length; i++) {
@@ -178,7 +203,7 @@
       const rows = [];
       for (const s of this.series) {
         if (!s.visible) continue;
-        const p = this.valueAt(s, x);
+        const p = this.valueAt(Object.assign({}, s, { pts: this.view(s) }), x);
         rows.push([s, p]);
       }
       const tip = this.tip; tip.textContent = "";
@@ -188,11 +213,11 @@
         const l = document.createElement("span"); const k = document.createElement("span"); k.className = "k"; k.style.background = s.color;
         l.appendChild(k); l.appendChild(document.createTextNode(s.label)); l.className = "ink2";
         const v = document.createElement("b");
-        v.textContent = p ? this.o.yFormat(p[1]) : "—";
+        v.textContent = p ? (this.o.indexed ? p[1].toFixed(0) : this.o.yFormat(p[1])) : "—";
         r.appendChild(v); r.appendChild(l); tip.appendChild(r);
         if (p) { const o = document.createElement("div"); o.className = "tiny muted"; o.textContent = "observed " + fmtDate(p[0]); tip.appendChild(o); }
       }
-      for (const ev of this.o.events || []) {
+      for (const ev of this.o.showEvents === false ? [] : (this.o.events || [])) {
         if (Math.abs(t(ev.date) - x) < (this.geo.x1 - this.geo.x0) / 80) { const o = document.createElement("div"); o.className = "small"; o.style.marginTop = "4px"; o.textContent = "● " + ev.label; tip.appendChild(o); }
       }
       tip.style.display = "block";

@@ -261,7 +261,11 @@ def build_site_data(db_path=DB_PATH, data_dir=DATA_DIR, out_dir=SITE_DATA_DIR, n
     summary = {
         "chemical": {"id": CHEMICAL_ID, "name": "H-Acid", "market": "China"},
         "plain": plain,
-        "explain": explain.block_explanations(P, live.get("blocks", {}), ev, cap, now),
+        "explain": (ex_items := explain.block_explanations(P, live.get("blocks", {}), ev, cap, now)),
+        "tiles": explain.tiles(live.get("blocks", {})),
+        "driver_plain": explain.PLAIN_DRIVER.get(live.get("driver"), live.get("driver")),
+        "evidence": explain.evidence(ex_items),
+        "headline": explain.headline(plain, live, forensics[-1] if forensics else None, ex_items) if plain else "",
         "generated_at": now.strftime("%Y-%m-%d %H:%M") + " CST",
         "price": None if last_row is None else {
             "value": float(last_price.iloc[-1]), "date": _d(last_price.index[-1]), "unit": "CNY/t",

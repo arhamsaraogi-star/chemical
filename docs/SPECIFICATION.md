@@ -217,18 +217,29 @@ for the price). Quality ≥ 0.7 is one of the three evidence-confidence points.
 
 ## 9. Website
 
-Static, hash-routed, no framework, no tracking. Pages: Dashboard, H-Acid detail, History,
-Inflection (forensic), Events, Supply, Data quality, Sources, Methodology, About.
-* Dashboard: price (observed, with date and age), 1D/5D/20D/60D/1Y changes computed only from real
-  observations near the comparison date (else "n/a"), state + score + meter, sentence, current
-  pressure, confirmation k/n, evidence confidence, detected-since, data quality; price chart with
-  ranges 1M/3M/6M/1Y/3Y/MAX, drag-zoom, inflection bands (click → forensic page), event markers;
-  "Why is it moving?" blocks; historical context; quality; source freshness.
-* Charts: one y-axis per chart; different units → separate charts or indexed to 100; step lines with
-  dashed unobserved gaps; crosshair tooltip listing every visible series with its observation date.
-* Every epistemic kind is shown with a pill (observed/derived/estimated/inferred/ai-extracted).
-* Dark/light mode; mobile-responsive; text inserted with `textContent` only.
-* Multi-chemical ready: `site/data/meta.json` lists chemicals; only H-Acid is active.
+Static, hash-routed, no framework, no tracking. Principle: **show the conclusion first; every piece of
+evidence is one click deeper (progressive disclosure).** The scoring engine is not changed by the UI.
+
+Navigation: **Overview · Price · Drivers · Events · History · Data · Methodology** (old URLs redirect).
+
+**Overview** answers three questions: what is happening, why, and is an inflection developing. It holds only:
+1. Header: price (observed, with date, source, link), 20D change, qualitative state, one plain sentence
+   (`explain.headline`, deterministic), a small data-quality badge (→ Data) and a small "Cycle score N"
+   that expands into a per-block "Why N?" bar chart.
+2. One dominant price chart (~half the viewport): 1Y / 3Y / MAX, Events and Inflections toggles,
+   "+ Compare" (producer quotes, feedstocks, dye, export unit value). Comparisons switch the chart to an
+   indexed view (all lines = 100 on the first common date) so one axis is kept.
+3. What's happening: the leading factor and four tiles - Supply, Demand (dye-price proxy), Feedstock, Trade.
+4. Why?: the main pressure in plain words, one evidence line per factor (↑ ↓ → –), confidence.
+5. Historical context: closest analogue (or "No strong historical analogue") and past inflections.
+
+**Price**: market price and producer quotes, changes, collapsible score history and the full provenance
+table. **Drivers**: one plain sentence per factor, small-multiple charts, collapsible producer/capacity
+tables. **History** / **Inflection**: story, diagnosis, before/during factor table, dated press context,
+then technical detail. **Data**: data quality, collector status and source registry.
+
+Rules: every headline number shows source + date + vintage + series definition; one y-axis per chart;
+dashed lines mark unobserved gaps; epistemic-kind pills; dark/light; mobile; `textContent` only.
 
 ## 10. Operations
 * Schedules: weekdays 02:37 and 10:37 UTC. Manual `workflow_dispatch` with `backfill=true` runs NBS,

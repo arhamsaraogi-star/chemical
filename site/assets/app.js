@@ -40,8 +40,8 @@
   const sampleNote = (n, label) => h("span", { class: "tag" }, `N = ${n} — ${label}`);
 
   // ---------------------------------------------------------------- shell
-  const NAV = [["#/", "Dashboard"], ["#/h-acid", "H-Acid"], ["#/history", "History"], ["#/events", "Events"],
-    ["#/supply", "Supply"], ["#/quality", "Data quality"], ["#/sources", "Sources"], ["#/methodology", "Methodology"], ["#/about", "About"]];
+  const NAV = [["#/", "Overview"], ["#/price", "Price"], ["#/drivers", "Drivers"], ["#/events", "Events"],
+    ["#/history", "History"], ["#/data", "Data"], ["#/methodology", "Methodology"]];
   function shell() {
     const nav = h("nav", { class: "main", "aria-label": "Sections" }, NAV.map(([href, t]) => h("a", { href }, t)));
     const theme = h("button", { class: "icon", title: "Toggle light/dark", "aria-label": "Toggle colour theme", onclick: toggleTheme }, "◐");
@@ -160,131 +160,149 @@
       h("dl", { class: "kv" }, terms.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])));
   }
 
-  async function pageDashboard(main) {
-    const [S, X, ser, meta, I] = await Promise.all([D("summary"), D("stats"), D("series"), load("data/meta.json"), D("inflections")]);
-    const L = S.live || {};
-    const P = S.price || {};
-    const PL = S.plain || {};
+  const TONE_COLOR = { up: "var(--serious)", down: "var(--s1)", flat: "var(--good)", none: "var(--axis)" };
+  const CONF_WORD = { High: "High", Medium: "Moderate", Low: "Low" };
+  const qualityWord = (q) => q >= 0.75 ? "Good" : q >= 0.5 ? "Fair" : "Limited";
+  const COMPARE = [["hacid.quote", "Producer quotes"], ["feed.naphthalene_refined", "Refined naphthalene"], ["feed.nitric_acid", "Nitric acid"],
+    ["feed.sulfuric_acid", "Sulfuric acid"], ["feed.caustic_soda", "Caustic soda"], ["dye.reactive", "Reactive dye"], ["derived.export_uv", "Export unit value"]];
+
+  async function pageOverview(main) {
+    const [S, ser, I, evs] = await Promise.all([D("summary"), D("series"), D("inflections"), D("events")]);
+    const L = S.live || {}, P = S.price || {}, Q = S.quality || {};
     const today = S.generated_at ? S.generated_at.slice(0, 10) : null;
-    const latest = I[I.length - 1];
-
-    // 1. plain-English answer
-    main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } },
-      h("div", { class: "kicker" }, "H-Acid · China · a key raw material for textile dyes"),
-      h("div", { class: "chem-strip", "aria-label": "Chemicals monitored" }, (meta.chemicals || []).map((c) =>
-        h("a", { class: "chem-chip" + (c.id === CHEM ? " on" : ""), href: "#/" }, h("span", { class: "dot", style: { background: STATE_COLOR[c.state] || "var(--muted)" } }), c.name)))));
-    const mult = PL.multiple_vs_year_first;
-    const head = `H-Acid costs ${fmtCNY(P.value)} per tonne` + (PL.is_record ? " — a record high" : "") +
-      (mult && mult > 1.3 ? `, ${mult.toFixed(1)}× its price in ${new Date(PL.year_first_date + "T00:00:00Z").toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" })}.` : ".");
-    const hero = h("section", { class: "card hero" },
-      h("h1", { class: "headline" }, head), citation(P),
-      h("div", { class: "qa" },
-        h("div", {}, h("div", { class: "q" }, "Is a new price turn starting right now?"),
-          h("div", { class: "a" }, h("span", { class: "dot", style: { background: STATE_COLOR[L.state] || "var(--muted)" } }), STATE_PLAIN[L.state] || "Not enough data."),
-          h("div", { class: "small muted" }, `Monitor reading: ${L.state} · score ${Math.round(L.score || 0)}/100 · `, link("#/methodology", "what this means"))),
-        h("div", {}, h("div", { class: "q" }, "What is the main pressure on the price today?"),
-          h("div", { class: "a" }, L.driver || "—"),
-          h("div", { class: "small muted" }, ["NORMAL", "WATCH"].includes(L.state) ? "A mild push only - not strong enough to signal a price turn." : "Strong enough to be driving a price turn.", " ", h("a", { href: "#/", onclick: (e) => { e.preventDefault(); const t = document.getElementById("explain"); if (t) t.scrollIntoView({ behavior: "smooth" }); } }, "see all factors ↓"))),
-        latest ? h("div", {}, h("div", { class: "q" }, "What was the most recent big move?"),
-          h("div", { class: "a" }, `${latest.direction === "up" ? "▲ +" : "▼ "}${Math.round(Math.abs(latest.magnitude) * 100)}% since ${fmtD(latest.price_onset.best)}`),
-          h("div", { class: "small muted" }, `${fmtCNY(latest.start_price)} → ${fmtCNY(latest.end_price)} · `, link("#/inflection/" + latest.id, "read the story →"))) : null));
-    main.appendChild(hero);
-
-    // 2. chart + latest surge story
-    const chartCard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "H-Acid price in China (¥ per tonne)"), link("#/h-acid", "All data →")));
-    const story = latest ? h("section", { class: "card" },
-      h("h2", {}, h("span", {}, `The latest price surge (${latest.id})`), link("#/inflection/" + latest.id, "Full analysis →")),
-      h("p", { class: "story" }, latest.story.summary),
-      h("p", {}, h("b", {}, "Diagnosis: "), latest.story.diagnosis, " ", kind("inferred")),
-      latest.story.press.length ? h("div", {}, h("div", { class: "kicker", style: { margin: "12px 0 6px" } }, "What industry press reported at the time"),
-        h("ul", { class: "press" }, latest.story.press.map((n) => h("li", {}, h("span", { class: "muted small" }, fmtD(n.pub_date) + " · " + n.source + " "), ext(n.url, "↗"), h("div", {}, n.summary_en))))) : null,
-      h("p", { class: "tiny muted" }, "Press reports are shown for context; they are cited, not used in the score.")) : null;
-    main.appendChild(h("div", { class: "grid g2", style: { marginTop: "16px" } }, chartCard, story));
-    const evs = await D("events");
-    priceChart(chartCard, ser, { today, height: 300, events: evs.map((e) => ({ date: e.event_date, label: `${e.type}: ${e.company || "industry"}` })) });
-    chartCard.appendChild(h("div", { class: "src-line" }, "Each dot is a real, cited price. The line holds the last known price until the next one; dashed = no public price for over 2½ months. Shaded areas = detected price surges (click one)."));
-
-    // 3. why is it moving
-    main.appendChild(h("div", { class: "section-title", id: "explain" }, h("h2", {}, "Why is the price where it is?"), h("span", { class: "small muted" }, "each factor in one sentence, with the number behind it")));
-    main.appendChild(h("section", { class: "card" }, explainList(S.explain || [])));
-
-    // 4. technical
-    main.appendChild(h("div", { class: "section-title" }, h("h2", {}, "For analysts"), h("span", { class: "small muted" }, "score, signal blocks, data quality")));
-    const sc = L.score === null || L.score === undefined ? null : L.score;
+    const c20 = (S.changes || {})["20D"];
     const stColor = STATE_COLOR[L.state] || "var(--muted)";
-    const c = L.confirmation || {};
-    const chg = S.changes || {};
-    const card = h("section", { class: "card signal", "aria-label": "Current signal" },
-      h("div", { class: "kicker" }, "Cycle score ", kind("derived")),
-      h("div", { class: "state" }, h("span", { class: "dot", style: { background: stColor } }), h("span", { class: "label" }, L.state || "NO DATA")),
-      h("div", { class: "score" }, sc === null ? "—" : Math.round(sc), h("small", {}, " / 100")),
-      h("div", { class: "meter", role: "meter", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": sc || 0 }, h("i", { style: { width: (sc || 0) + "%", background: stColor } })),
-      h("div", { class: "meter-ticks" }, ["0", "25", "50", "70", "85", "100"].map((x) => h("span", {}, x))),
-      h("div", { class: "chg-row" }, ["1D", "5D", "20D", "60D", "1Y"].map((k) => h("span", { title: chg[k] ? `vs ${fmtD(chg[k].from_date)} (${fmtCNY(chg[k].from_value)})` : "no observation near the comparison date" },
-        h("span", { class: "muted" }, k + " "), h("b", { class: chg[k] ? dirCls(chg[k].pct) : "muted" }, chg[k] ? pct(chg[k].pct) : "n/a")))),
-      h("dl", { class: "kv" },
-        h("dt", {}, "Confirmation"), h("dd", {}, c.available !== undefined ? `${c.confirming} / ${c.available} independent information families with data` : "—"),
-        h("dt", {}, "Evidence"), h("dd", {}, `${L.evidence_confidence || "—"} confidence · coverage ${L.coverage !== undefined ? Math.round(L.coverage * 100) + "%" : "—"}`),
-        h("dt", {}, "Alert"), h("dd", {}, L.detected_since ? `active since ${fmtD(L.detected_since)}` : "No active alert"),
-        h("dt", {}, "Analogue"), h("dd", {}, (L.analogue || {}).id ? `${L.analogue.id} · ${L.analogue.similarity}%` : ((L.analogue || {}).label || "—")),
-        h("dt", {}, "Inflections"), h("dd", {}, `${X.n_inflections} `, sampleNote(X.n_inflections, X.sample_label)),
-        h("dt", {}, "Score as of"), h("dd", {}, fmtD(L.as_of), " ", h("span", { class: "muted tiny" }, "(point-in-time)"))));
-    const why = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Signal blocks"), h("span", { class: "tiny muted" }, "−1 bearish … +1 bullish · ✓ confirms")),
-      blocksList(L.blocks || {}, c),
-      h("p", { class: "tiny muted", style: { marginBottom: 0 } }, "Correlated indicators are averaged inside a block, so the H-Acid price and producer quotes count once. ", link("#/methodology", "How blocks work")));
-    main.appendChild(h("div", { class: "grid g2" }, card, why));
 
-    const Q = S.quality;
-    const qcard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Data quality ", h("b", {}, Math.round(Q.overall * 100) + "%")), link("#/quality", "Details →")),
-      h("div", { class: "table-wrap" }, h("table", {}, h("tbody", {}, Q.groups.map((g) => h("tr", {}, h("td", {}, g.group), h("td", { class: "num" }, Math.round(g.coverage * 100) + "%"),
-        h("td", {}, statusDot(g.coverage >= 0.9 ? "good" : g.coverage >= 0.6 ? "partial" : g.coverage > 0 ? "sparse" : "none", g.coverage >= 0.9 ? "var(--good)" : g.coverage >= 0.6 ? "var(--warning)" : "var(--critical)"))))))),
-      h("p", { class: "tiny muted", style: { marginBottom: 0 } }, `Point-in-time: ${Math.round(Q.overall_pit_coverage * 100)}% of records (confirmed ${Math.round(Q.confirmed_share * 100)}%, estimated ${Math.round(Q.estimated_share * 100)}%, unknown ${Math.round(Q.unknown_share * 100)}%) · ${Q.independent_families} independent source families · coverage over trailing ${Q.window_days} days`));
-    const fcard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "How fresh is the data?"), link("#/sources", "All sources →")),
-      h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Source"), h("th", {}, "Latest data"), h("th", {}, "Status"))),
-        h("tbody", {}, (S.freshness || []).filter((f) => f.last_observation_date || f.collector_status === "failed").map((f) => h("tr", {}, h("td", {}, f.name.split(" - ")[0].split(" (")[0]),
-          h("td", { class: "num" }, f.last_observation_date ? `${fmtD(f.last_observation_date)}` : "—", f.age_days !== null && f.age_days !== undefined ? h("span", { class: "muted" }, ` · ${f.age_days}d`) : null),
-          h("td", {}, statusDot(f.collector_status, { ok: "var(--good)", partial: "var(--warning)", curated: "var(--s1)", stale: "var(--warning)", failed: "var(--critical)" }[f.collector_status] || "var(--muted)"))))))),
-      h("p", { class: "tiny muted", style: { marginBottom: 0 } }, "Prices update each working day; trade data arrives about two months late."));
-    main.appendChild(h("div", { class: "grid g2", style: { marginTop: "16px" } }, qcard, fcard));
-    main.appendChild(glossary());
+    // 1. header
+    const why = h("details", { class: "why-score" }, h("summary", {}, `Cycle score ${Math.round(L.score || 0)}`),
+      h("div", { class: "why-bars" }, h("div", { class: "kicker" }, `Why ${Math.round(L.score || 0)}? (−1 lower price … +1 higher price)`),
+        ["PRICE", "SUPPLY", "DEMAND", "COST", "INVENTORY", "DOWNSTREAM", "TRADE", "EVENTS"].filter((b) => (L.blocks || {})[b]).map((b) => {
+          const v = L.blocks[b].value;
+          const bar = h("div", { class: "diverge" });
+          if (v !== null) { const w = Math.min(50, Math.abs(v) * 50); bar.appendChild(h("i", { style: { left: v >= 0 ? "50%" : (50 - w) + "%", width: w + "%", background: v >= 0 ? "var(--s2)" : "var(--s1)" } })); }
+          return h("div", { class: "why-row" }, h("span", {}, b.charAt(0) + b.slice(1).toLowerCase()), bar, h("span", { class: "muted tiny" }, v === null ? "no data" : (v > 0 ? "+" : "") + v.toFixed(2)));
+        }),
+        h("div", { class: "tiny muted" }, "Related indicators share one vote per block. ", link("#/methodology", "How the score works"))));
+    main.appendChild(h("section", { class: "ov-head" },
+      h("div", { class: "ov-top" }, h("span", { class: "kicker" }, "H-ACID · CHINA"), h("span", { class: "kicker" }, fmtD(today))),
+      h("div", { class: "ov-main" },
+        h("div", {}, h("div", { class: "ov-price" }, fmtCNY(P.value), h("span", { class: "unit" }, " / tonne")),
+          h("div", { class: "ov-sub" }, c20 ? h("b", { class: dirCls(c20.pct) }, pct(c20.pct) + " 20D") : h("span", { class: "muted" }, "20D n/a"),
+            h("span", { class: "muted" }, ` · ${fmtD(P.date)} · Baiinfo market average · `), kind("observed"), " ", ext(P.url, "source ↗"))),
+        h("div", { class: "ov-state" }, h("div", { class: "state-pill", style: { "--c": stColor } }, h("span", { class: "dot" }), L.state || "NO DATA"), why)),
+      h("p", { class: "ov-sentence" }, S.headline || L.sentence || ""),
+      h("a", { class: "dq-badge", href: "#/data" }, `Data quality: ${qualityWord(Q.overall || 0)} · ${Math.round((Q.overall || 0) * 100)}%`)));
+
+    // 2. chart
+    const chartCard = h("section", { class: "card ov-chart" });
+    main.appendChild(chartCard);
+    const seriesBase = [{ id: "hacid.spot", label: "H-Acid market price", color: COLORS[0], points: ser.series["hacid.spot"].points, maxGapDays: 75, extendTo: today }];
+    const box = h("div", {});
+    const ch = new TSChart(box, { series: seriesBase, height: Math.max(320, Math.min(520, Math.round(window.innerHeight * 0.48))), range: "MAX", xMax: today,
+      markers: I.map((i) => ({ id: i.id, start: i.price_onset.best, end: i.end, direction: i.direction, onClick: () => { location.hash = "#/inflection/" + i.id; } })),
+      events: evs.map((e) => ({ date: e.event_date, label: `${e.type}: ${e.company || "industry"}` })),
+      yFormat: (v) => "¥" + fmtN(v / 1000) + "k", ariaLabel: "H-Acid price chart" });
+    const seg = h("div", { class: "seg" });
+    for (const r of ["1Y", "3Y", "MAX"]) {
+      const b = h("button", { class: r === "MAX" ? "on" : "", onclick: () => { ch.setRange(r); [...seg.children].forEach((x) => x.classList.toggle("on", x === b)); } }, r);
+      seg.appendChild(b);
+    }
+    const tog = (label, on, fn) => { const b = h("button", { class: "toggle plain", "aria-pressed": String(on) }, label); b.addEventListener("click", () => { const v = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(v)); fn(v); }); return b; };
+    const legend = h("div", { class: "legend" });
+    const drawLegend = () => { legend.textContent = ""; if (ch.series.length > 1) ch.series.forEach((s) => legend.appendChild(h("span", { style: { "--k": s.color } }, s.label))); };
+    const cmpMenu = h("div", { class: "cmp-menu", hidden: true }, COMPARE.filter(([id]) => ser.series[id]).map(([id, label], k) => {
+      const cb = h("input", { type: "checkbox", id: "cmp-" + k });
+      cb.addEventListener("change", () => {
+        if (cb.checked) ch.addSeries({ id, label, color: COLORS[1 + (k % 7)], points: ser.series[id].points, maxGapDays: 75, step: !id.startsWith("derived.export") });
+        else ch.removeSeries(id);
+        ch.setOption("indexed", ch.series.length > 1);
+        note.hidden = ch.series.length < 2; drawLegend();
+      });
+      return h("label", {}, cb, " ", label);
+    }));
+    const cmpBtn = h("button", { class: "toggle plain", "aria-expanded": "false", onclick: () => { cmpMenu.hidden = !cmpMenu.hidden; cmpBtn.setAttribute("aria-expanded", String(!cmpMenu.hidden)); } }, "＋ Compare");
+    const note = h("div", { class: "tiny muted", hidden: true }, "Comparing: every line = 100 on the first date all selected series have data, so different units share one axis.");
+    chartCard.appendChild(h("div", { class: "chart-toolbar" }, seg,
+      tog("Events", true, (v) => ch.setOption("showEvents", v)), tog("Inflections", true, (v) => ch.setOption("showMarkers", v)),
+      h("div", { class: "cmp-wrap" }, cmpBtn, cmpMenu)));
+    chartCard.appendChild(box); chartCard.appendChild(legend); chartCard.appendChild(note);
+    chartCard.appendChild(h("div", { class: "src-line" }, "Dots are real, cited prices; dashed = no public price for over 2½ months; shaded = detected price surges (click one). ", link("#/price", "Price detail →")));
+
+    // 3. what's happening + 4. why
+    const tiles = S.tiles || [];
+    const lead = tiles.find((t) => t.block === L.driver_block) || tiles.find((t) => t.tone === "up" || t.tone === "down");
+    const happening = h("section", { class: "card" }, h("div", { class: "kicker" }, "What's happening"),
+      h("div", { class: "big-line" }, h("span", { class: "dot", style: { background: lead ? TONE_COLOR[lead.tone] : "var(--muted)" } }),
+        lead ? `${lead.label === "Feedstock" ? "Feedstock costs are" : lead.label + " is"} ${lead.word.toLowerCase()}` : "No single factor stands out"),
+      h("div", { class: "tiles" }, tiles.map((t) => h("div", { class: "tile" }, h("div", { class: "muted small" }, t.label, t.proxy ? h("span", { class: "tiny" }, ` (${t.proxy})`) : null),
+        h("div", { class: "tile-word" }, h("span", { class: "dot", style: { background: TONE_COLOR[t.tone] } }), t.word)))),
+      h("div", { class: "tiny muted" }, "Orange = supports a higher price · blue = a lower price · green = stable · grey = not enough data. ", link("#/drivers", "Drivers →")));
+    const ev = (S.evidence || []).filter((e) => ["SUPPLY", "COST", "DOWNSTREAM", "TRADE", "EVENTS"].includes(e.block));
+    const whyCard = h("section", { class: "card" }, h("div", { class: "kicker" }, "Why?"),
+      h("div", { class: "big-line" }, L.driver_block && L.driver_block !== "PRICE" ? (() => { const d = S.driver_plain || L.driver; return d.charAt(0).toUpperCase() + d.slice(1) + (d.endsWith("s") ? " are" : " is") + " the main pressure" + (["NORMAL", "WATCH"].includes(L.state) ? " (a mild one)" : ""); })() : "No fundamental driver stands out"),
+      h("ul", { class: "evidence" }, ev.map((e) => h("li", {}, h("span", { class: "arrow " + (e.arrow === "↑" ? "up" : e.arrow === "↓" ? "down" : "muted") }, e.arrow), h("b", {}, e.name), h("span", { class: "muted small" }, e.short)))),
+      h("div", { class: "small" }, "Confidence: ", h("b", {}, CONF_WORD[L.evidence_confidence] || "—"), h("span", { class: "muted" }, ` · ${(L.confirmation || {}).confirming || 0} of ${(L.confirmation || {}).available || 0} independent factors agree`)));
+    main.appendChild(h("div", { class: "grid g2" }, happening, whyCard));
+
+    // 5. historical context
+    const an = L.analogue || {};
+    main.appendChild(h("section", { class: "card", style: { marginTop: "16px" } }, h("div", { class: "kicker" }, "Historical context"),
+      h("div", { class: "big-line" }, an.id ? h("span", {}, `Current conditions resemble the start of ${an.id} (${fmtD(an.start)}) · `, link("#/inflection/" + an.id, "View comparison →")) : "No strong historical analogue"),
+      h("table", { class: "past" }, h("tbody", {}, I.slice().reverse().map((f) => h("tr", { class: "click", onclick: () => { location.hash = "#/inflection/" + f.id; } },
+        h("td", {}, new Date(f.price_onset.best + "T00:00:00Z").toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })),
+        h("td", {}, (f.story || {}).diagnosis ? f.story.diagnosis.split(";")[0].split(",")[0].replace(/\.$/, "") : f.driver.type),
+        h("td", { class: "num " + (f.direction === "up" ? "up" : "down") }, pct(f.magnitude, 0)), h("td", { class: "num" }, link("#/inflection/" + f.id, "Analysis →")))))),
+      h("div", { class: "tiny muted" }, `${I.length} past inflections — too few for firm statistics. `, link("#/history", "All history →"))));
   }
 
-  async function pageDetail(main) {
-    const [S, ser, sum] = await Promise.all([D("series"), D("series"), D("summary")]);
-    main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } }, h("div", {}, h("div", { class: "kicker" }, "H-Acid · China"), h("h1", {}, "All series"))));
-    main.appendChild(h("p", { class: "lede" }, "Each chart has one axis. Series in different units are shown as separate charts or indexed to 100. Points are real observations; lines carry the last observation forward until the next one."));
-    const pc = h("section", { class: "card" }, h("h2", {}, "H-Acid price & producer quotes (CNY/t)"));
+  async function pagePrice(main) {
+    const [S, sum] = await Promise.all([D("series"), D("summary")]);
+    main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } }, h("div", {}, h("div", { class: "kicker" }, "H-Acid · China"), h("h1", {}, "Price"))));
+    const pc = h("section", { class: "card" }, h("h2", {}, "Market price & producer quotes (¥/t)"));
     main.appendChild(pc);
-    priceChart(pc, ser, { quotes: true, today: sum.generated_at.slice(0, 10) });
-    pc.appendChild(sourceLine(ser.series["hacid.spot"] || {}));
-    if (ser.series["hacid.quote"]) pc.appendChild(sourceLine(ser.series["hacid.quote"], h("span", {}, "Producer quotes: ex-works quotations / ex-works reference-range midpoints")));
-    const g = h("div", { class: "grid g2", style: { marginTop: "16px" } }); main.appendChild(g);
-    smallChart(g, "Feedstocks (indexed)", ["feed.naphthalene_refined", "feed.naphthalene_industrial", "feed.sulfuric_acid", "feed.nitric_acid", "feed.caustic_soda"], ser, { indexed: true, badge: kind("observed") });
-    smallChart(g, "Feedstock price index", ["derived.cost_idx"], ser, { badge: kind("derived"), colorOffset: 6 });
-    smallChart(g, "Reactive dyes (CNY/t)", ["dye.reactive", "dye.reactive_black_sci99"], ser, { badge: kind("observed"), maxGap: 400, colorOffset: 2 });
-    smallChart(g, "Exports — imports from China reported by destinations (t / month)", ["mirror.ind.hacid.qty", "mirror.kor.hacid.qty", "mirror.idn.hacid.qty", "export.hacid.qty"], ser, { badge: kind("observed"), step: false, maxGap: 70 });
-    smallChart(g, "Export / import unit value (USD/t, HS 292221)", ["derived.export_uv", "derived.export_uv_china"], ser, { badge: kind("derived"), step: false, maxGap: 70 });
-    smallChart(g, "Supply — available share of known capacity", ["derived.supply_index"], ser, { badge: kind("estimated"), yFormat: (v) => Math.round(v * 100) + "%", maxGap: 2000 });
-    smallChart(g, "Inventory", [], ser, { empty: "No reliable public inventory series exists for H-Acid. Marked unavailable - no synthetic inventory is used." });
-    const scard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Point-in-time inflection score"), kind("derived")));
-    g.appendChild(scard);
+    priceChart(pc, S, { quotes: true, today: sum.generated_at.slice(0, 10) });
+    pc.appendChild(sourceLine(S.series["hacid.spot"] || {}));
+    if (S.series["hacid.quote"]) pc.appendChild(sourceLine(S.series["hacid.quote"], h("span", {}, "Producer quotes = ex-works quotations or the midpoint of a stated ex-works range")));
+    const chg = sum.changes || {};
+    main.appendChild(h("div", { class: "grid g4", style: { marginTop: "16px" } }, ["1D", "5D", "20D", "60D", "1Y"].slice(0, 4).map((k) =>
+      h("div", { class: "card" }, h("div", { class: "kicker" }, k + " change"), h("div", { class: "score " + (chg[k] ? dirCls(chg[k].pct) : "muted") }, chg[k] ? pct(chg[k].pct) : "n/a"),
+        h("div", { class: "tiny muted" }, chg[k] ? `vs ${fmtD(chg[k].from_date)}` : "no observation near the comparison date")))));
+    const scard = h("details", { class: "card", style: { marginTop: "16px" } }, h("summary", {}, "Point-in-time cycle score history"));
+    main.appendChild(scard);
     const ok = (S.score || []).filter((r) => r.status === "ok").map((r) => [r.d, r.score]);
     const weak = (S.score || []).filter((r) => r.status !== "ok").map((r) => [r.d, r.score]);
     const ss = [];
     if (ok.length) ss.push({ id: "ok", label: "Score (alert-grade)", color: COLORS[6], points: ok, step: false, dots: false, maxGapDays: 4 });
     if (weak.length) ss.push({ id: "weak", label: "Raw score, insufficient evidence (capped at WATCH)", color: "var(--axis)", points: weak, step: false, dots: false, maxGapDays: 4 });
-    if (ss.length) { const b = h("div", {}); scard.appendChild(b); new TSChart(b, { series: ss, height: 200, yFormat: (v) => fmtN(v) }); scard.appendChild(h("div", { class: "legend" }, ss.map((x) => h("span", { style: { "--k": x.color } }, x.label)))); }
-    else scard.appendChild(h("p", { class: "muted small" }, "Not enough point-in-time history to score yet."));
-    scard.appendChild(h("div", { class: "src-line" }, "Bands: 25 WATCH · 50 DEVELOPING · 70 STRONG · 85 MAJOR. Rows with coverage below the minimum are capped at WATCH."));
-
-    // provenance table
-    main.appendChild(h("div", { class: "section-title" }, h("h2", {}, "Every H-Acid price observation"), h("span", { class: "small muted" }, "provenance, vintage and the original sentence")));
+    scard.addEventListener("toggle", () => { if (scard.open && !scard.dataset.done && ss.length) { scard.dataset.done = 1; const b = h("div", {}); scard.appendChild(b); new TSChart(b, { series: ss, height: 220, yFormat: (v) => fmtN(v) }); scard.appendChild(h("div", { class: "legend" }, ss.map((x) => h("span", { style: { "--k": x.color } }, x.label)))); } });
     const rows = [];
     for (const [fam, list] of Object.entries(S.by_family || {})) for (const r of list) rows.push(Object.assign({ fam }, r));
     rows.sort((a, b) => b.d.localeCompare(a.d));
-    main.appendChild(h("div", { class: "card table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Obs. date", "Value", "Kind", "Family", "Published", "Vintage", "Via", "Evidence"].map((x) => h("th", { class: x === "Value" ? "num" : "" }, x)))),
-      h("tbody", {}, rows.map((r) => h("tr", {}, h("td", { class: "num" }, fmtD(r.d), r.precision && r.precision !== "day" ? h("div", { class: "tiny muted" }, r.precision) : null), h("td", { class: "num" }, fmtCNY(r.v)), h("td", {}, kind(r.kind)), h("td", {}, r.fam),
-        h("td", { class: "num" }, fmtD(r.pub)), h("td", {}, r.vintage), h("td", { class: "small" }, r.via || r.src, " ", ext(r.url, "↗")), h("td", { class: "small ink2", style: { maxWidth: "420px" } }, r.text || "")))))));
+    main.appendChild(h("details", { class: "card", style: { marginTop: "16px" } }, h("summary", {}, `Every H-Acid price observation (${rows.length}) — source, publication date and original sentence`),
+      h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Date", "Value", "Kind", "Family", "Published", "Vintage", "Via", "Evidence"].map((x) => h("th", { class: x === "Value" ? "num" : "" }, x)))),
+        h("tbody", {}, rows.map((r) => h("tr", {}, h("td", { class: "num" }, fmtD(r.d), r.precision && r.precision !== "day" ? h("div", { class: "tiny muted" }, r.precision) : null), h("td", { class: "num" }, fmtCNY(r.v)), h("td", {}, kind(r.kind)), h("td", {}, r.fam),
+          h("td", { class: "num" }, fmtD(r.pub)), h("td", {}, r.vintage), h("td", { class: "small" }, r.via || r.src, " ", ext(r.url, "↗")), h("td", { class: "small ink2", style: { maxWidth: "420px" } }, r.text || ""))))))));
+  }
+
+  async function pageDrivers(main) {
+    const [ser, sum] = await Promise.all([D("series"), D("summary")]);
+    main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } }, h("div", {}, h("div", { class: "kicker" }, "H-Acid · China"), h("h1", {}, "Drivers"))));
+    main.appendChild(h("section", { class: "card" }, explainList(sum.explain || [])));
+    const g = h("div", { class: "grid g2", style: { marginTop: "16px" } }); main.appendChild(g);
+    smallChart(g, "Feedstocks (indexed)", ["feed.naphthalene_refined", "feed.naphthalene_industrial", "feed.sulfuric_acid", "feed.nitric_acid", "feed.caustic_soda"], ser, { indexed: true, badge: kind("observed") });
+    smallChart(g, "Feedstock price index", ["derived.cost_idx"], ser, { badge: kind("derived"), colorOffset: 6 });
+    smallChart(g, "Reactive dyes (¥/t)", ["dye.reactive", "dye.reactive_black_sci99"], ser, { badge: kind("observed"), maxGap: 400, colorOffset: 2 });
+    smallChart(g, "Export / import unit value (USD/t, HS 292221)", ["derived.export_uv", "derived.export_uv_china"], ser, { badge: kind("derived"), step: false, maxGap: 70 });
+    smallChart(g, "Imports from China reported by destinations (t/month)", ["mirror.ind.hacid.qty", "mirror.kor.hacid.qty", "mirror.idn.hacid.qty", "export.hacid.qty"], ser, { badge: kind("observed"), step: false, maxGap: 70 });
+    smallChart(g, "Supply — available share of known capacity", ["derived.supply_index"], ser, { badge: kind("estimated"), yFormat: (v) => Math.round(v * 100) + "%", maxGap: 2000 });
+    const sup = h("div", {}); main.appendChild(h("details", { class: "card", style: { marginTop: "16px" } }, h("summary", {}, "Producers and capacity"), sup));
+    await pageSupplyInto(sup);
+  }
+
+  async function pageData(main) {
+    const q = h("div", {}), s = h("div", {});
+    await pageQuality(q); await pageSources(s);
+    main.appendChild(q); main.appendChild(h("div", { style: { height: "24px" } })); main.appendChild(s);
   }
 
   async function pageHistory(main) {
@@ -405,7 +423,8 @@
     [fType, fCo, fSev].forEach((x) => x.addEventListener("change", draw)); q.addEventListener("input", draw); draw();
   }
 
-  async function pageSupply(main) {
+  async function pageSupply(main) { return pageSupplyInto(main); }
+  async function pageSupplyInto(main) {
     const [S, ser] = await Promise.all([D("supply"), D("series")]);
     main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } }, h("div", {}, h("div", { class: "kicker" }, "H-Acid"), h("h1", {}, "Supply"))));
     main.appendChild(h("p", { class: "warn" }, S.note));
@@ -463,14 +482,15 @@
   }
 
   // ---------------------------------------------------------------- router
-  const routes = [[/^#?\/?$/, pageDashboard], [/^#\/h-acid$/, pageDetail], [/^#\/history$/, pageHistory], [/^#\/inflection\/(\w+)$/, pageInflection],
+  const routes = [[/^#?\/?$/, pageOverview], [/^#\/price$/, pagePrice], [/^#\/h-acid$/, pagePrice], [/^#\/drivers$/, pageDrivers], [/^#\/data$/, pageData], [/^#\/history$/, pageHistory], [/^#\/inflection\/(\w+)$/, pageInflection],
     [/^#\/events$/, pageEvents], [/^#\/supply$/, pageSupply], [/^#\/quality$/, pageQuality], [/^#\/sources$/, pageSources],
     [/^#\/methodology$/, pageMethodology], [/^#\/about$/, pageAbout]];
   async function route() {
     const hash = location.hash || "#/";
     const main = document.getElementById("main");
     main.textContent = "";
-    document.querySelectorAll("nav.main a").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === hash || (hash.startsWith("#/inflection") && a.getAttribute("href") === "#/history")));
+    const alias = { "#/h-acid": "#/price", "#/supply": "#/drivers", "#/quality": "#/data", "#/sources": "#/data", "#/about": "#/methodology" };
+    document.querySelectorAll("nav.main a").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === (alias[hash] || hash) || (hash.startsWith("#/inflection") && a.getAttribute("href") === "#/history")));
     for (const [re, fn] of routes) {
       const m = hash.match(re);
       if (m) {

@@ -185,3 +185,96 @@ def inflection_story(f: dict, notes: list) -> dict:
     if f["driver"]["amplifiers"]:
         diag += ", amplified by " + " and ".join(a.lower() for a in f["driver"]["amplifiers"])
     return {"summary": " ".join(parts), "diagnosis": diag + ".", "press": notes}
+
+
+TILE_WORDS = {  # block -> (label, word when it supports a higher price, word when lower, neutral word)
+    "SUPPLY": ("Supply", "Tightening", "Loosening", "Stable"),
+    "DOWNSTREAM": ("Demand", "Strengthening", "Weakening", "Stable"),
+    "COST": ("Feedstock", "Rising", "Falling", "Stable"),
+    "TRADE": ("Trade", "Firming", "Softening", "Stable"),
+}
+
+
+def tiles(blocks: dict) -> list:
+    """The four driver tiles on the overview. Tone: 'up' = supports a higher price, 'down' = lower."""
+    out = []
+    for b, (label, up, down, flat) in TILE_WORDS.items():
+        v = (blocks.get(b) or {}).get("value")
+        if v is None:
+            word, tone = ("Not enough data", "none")
+        elif v >= 0.1:
+            word, tone = up, "up"
+        elif v <= -0.1:
+            word, tone = down, "down"
+        else:
+            word, tone = flat, "flat"
+        out.append({"block": b, "label": label, "word": word, "tone": tone, "value": v,
+                    "proxy": "dye prices" if b == "DOWNSTREAM" else None})
+    return out
+
+
+SHORT = {   # block -> function(numbers) -> short evidence phrase
+    "SUPPLY": lambda n: f"~{n['available_share'] * 100:.0f}% of known capacity available; {n['cuts_90d']} new supply cuts in 90 days",
+    "COST": lambda n: f"feedstock index {_pct(n['index_3m'])} in 3 months",
+    "TRADE": lambda n: f"export unit value {_pct(n['chg_3m'])} in 3 months ({n['month']})",
+    "PRICE": lambda n: f"flat for {n['flat_days']} days after {_pct(n['chg_1m'])} in the prior month",
+    "DOWNSTREAM": lambda n: f"¥{n['last'] / 1000:.0f}/kg now vs ¥{n['first'] / 1000:.0f}/kg in mid-2025; too few points to score",
+    "EVENTS": lambda n: f"last recorded event {n['days_since_last']} days ago; effect has faded",
+}
+
+
+def evidence(items: list) -> list:
+    arrow = {"pushing price up": "↑", "pushing price down": "↓", "no clear push": "→", "no data": "–"}
+    out = []
+    for e in items:
+        try:
+            short = SHORT[e["block"]](e["numbers"]) if e["block"] in SHORT and e["numbers"] else None
+        except (KeyError, TypeError):
+            short = None
+        out.append({"block": e["block"], "name": e["name"], "arrow": arrow.get(e["effect"], "–"),
+                    "effect": e["effect"], "short": short or e["sentence"].split(". ")[0].rstrip(".")})
+    return out
+
+
+PLAIN_DRIVER = {"Cost relief": "falling raw-material costs", "Cost push": "rising raw-material costs",
+                "Supply tightening": "tighter supply", "Supply easing": "easier supply",
+                "Export demand firming": "firmer export demand", "Export demand softening": "softer export demand",
+                "Downstream dye strength": "stronger dye prices", "Downstream dye weakness": "weaker dye prices",
+                "Inventory drawdown": "falling stockpiles", "Inventory build": "rising stockpiles",
+                "Supply-disruption events": "plant disruptions", "Supply-restoring events": "plants restarting"}
+
+
+def headline(plain: dict, live: dict, latest: dict, items: list) -> str:
+    """One or two plain sentences for the top of the overview. Derived only from displayed values."""
+    price = plain.get("price")
+    parts = []
+    pr = next((e for e in items if e["block"] == "PRICE"), None)
+    flat = (pr or {}).get("numbers", {}).get("flat_days", 0) or 0
+    recent_up = latest and latest["direction"] == "up" and \
+        (pd.Timestamp(plain["date"]) - pd.Timestamp(latest["end"])).days <= 60
+    if price and plain.get("is_record") and recent_up and flat >= 5:
+        parts.append(f"Prices are holding at a record ¥{price:,.0f}/t after a {latest['magnitude'] * 100:.0f}% surge "
+                     f"that began on {pd.Timestamp(latest['price_trigger']):%d %b}.")
+    elif price and plain.get("is_record"):
+        parts.append(f"Prices are at a record ¥{price:,.0f}/t.")
+    elif price:
+        parts.append(f"The latest price is ¥{price:,.0f}/t.")
+    state = live.get("state")
+    plain_driver = PLAIN_DRIVER
+    _unused = {"Cost relief": "falling raw-material costs", "Cost push": "rising raw-material costs",
+                    "Supply tightening": "tighter supply", "Supply easing": "easier supply",
+                    "Export demand firming": "firmer export demand", "Export demand softening": "softer export demand",
+                    "Downstream dye strength": "stronger dye prices", "Downstream dye weakness": "weaker dye prices",
+                    "Inventory drawdown": "falling stockpiles", "Inventory build": "rising stockpiles",
+                    "Supply-disruption events": "plant disruptions", "Supply-restoring events": "plants restarting"}
+    drv, blk = plain_driver.get(live.get("driver"), (live.get("driver") or "").lower()), live.get("driver_block")
+    if state == "NORMAL":
+        s = "No new price turn is building"
+        if blk and blk != "PRICE" and drv:
+            s += f"; {drv} are a mild pressure" if drv.endswith("s") else f"; {drv} is a mild pressure"
+        parts.append(s + ".")
+    elif state == "WATCH":
+        parts.append(f"Some pressure is building ({drv}), but a new price regime is not confirmed.")
+    elif state in ("DEVELOPING INFLECTION", "STRONG INFLECTION", "MAJOR INFLECTION"):
+        parts.append(f"A new price turn appears to be under way, led by {drv}.")
+    return " ".join(parts)
