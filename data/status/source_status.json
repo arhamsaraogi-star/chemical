@@ -27,6 +27,20 @@
     "status": "ok",
     "warnings": []
   },
+  "ecb_fx": {
+    "failure_reason": null,
+    "last_attempt": "2026-10-07T08:47:48Z",
+    "last_observation_date": "2026-10-06",
+    "last_success": "2026-10-07T08:47:48Z",
+    "mode": "backfill",
+    "rows_fetched": 961,
+    "rows_new": 961,
+    "rows_rejected": [],
+    "rows_revised": 0,
+    "rows_total": 961,
+    "status": "ok",
+    "warnings": []
+  },
   "nbs_10day": {
     "failure_reason": null,
     "last_attempt": "2026-10-07T07:05:36Z",

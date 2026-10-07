@@ -228,31 +228,22 @@
     chartCard.appendChild(box); chartCard.appendChild(legend); chartCard.appendChild(note);
     chartCard.appendChild(h("div", { class: "src-line" }, "Dots are real, cited prices; dashed = no public price for over 2½ months; shaded = detected price surges (click one). ", link("#/price", "Price detail →")));
 
-    // 3. what's happening + 4. why
-    const tiles = S.tiles || [];
-    const lead = tiles.find((t) => t.block === L.driver_block) || tiles.find((t) => t.tone === "up" || t.tone === "down");
-    const happening = h("section", { class: "card" }, h("div", { class: "kicker" }, "What's happening"),
-      h("div", { class: "big-line" }, h("span", { class: "dot", style: { background: lead ? TONE_COLOR[lead.tone] : "var(--muted)" } }),
-        lead ? `${lead.label === "Feedstock" ? "Feedstock costs are" : lead.label + " is"} ${lead.word.toLowerCase()}` : "No single factor stands out"),
-      h("div", { class: "tiles" }, tiles.map((t) => h("div", { class: "tile" }, h("div", { class: "muted small" }, t.label, t.proxy ? h("span", { class: "tiny" }, ` (${t.proxy})`) : null),
-        h("div", { class: "tile-word" }, h("span", { class: "dot", style: { background: TONE_COLOR[t.tone] } }), t.word)))),
-      h("div", { class: "tiny muted" }, "Orange = supports a higher price · blue = a lower price · green = stable · grey = not enough data. ", link("#/drivers", "Drivers →")));
-    const ev = (S.evidence || []).filter((e) => ["SUPPLY", "COST", "DOWNSTREAM", "TRADE", "EVENTS"].includes(e.block));
-    const whyCard = h("section", { class: "card" }, h("div", { class: "kicker" }, "Why?"),
-      h("div", { class: "big-line" }, L.driver_block && L.driver_block !== "PRICE" ? (() => { const d = S.driver_plain || L.driver; return d.charAt(0).toUpperCase() + d.slice(1) + (d.endsWith("s") ? " are" : " is") + " the main pressure" + (["NORMAL", "WATCH"].includes(L.state) ? " (a mild one)" : ""); })() : "No fundamental driver stands out"),
-      h("ul", { class: "evidence" }, ev.map((e) => h("li", {}, h("span", { class: "arrow " + (e.arrow === "↑" ? "up" : e.arrow === "↓" ? "down" : "muted") }, e.arrow), h("b", {}, e.name), h("span", { class: "muted small" }, e.short)))),
-      h("div", { class: "small" }, "Confidence: ", h("b", {}, CONF_WORD[L.evidence_confidence] || "—"), h("span", { class: "muted" }, ` · ${(L.confirmation || {}).confirming || 0} of ${(L.confirmation || {}).available || 0} independent factors agree`)));
-    main.appendChild(h("div", { class: "grid g2" }, happening, whyCard));
+    // 3. drivers: four tiles, one reason each
+    const ev = Object.fromEntries((S.evidence || []).map((e) => [e.block, e]));
+    main.appendChild(h("section", { class: "tiles4" }, (S.tiles || []).map((t) => h("a", { class: "tile4", href: "#/drivers" },
+      h("div", { class: "muted small" }, t.label),
+      h("div", { class: "tile-word" }, h("span", { class: "dot", style: { background: TONE_COLOR[t.tone] } }), t.word),
+      h("div", { class: "tiny muted" }, (ev[t.block] || {}).short || "")))));
+    main.appendChild(h("div", { class: "tiny muted", style: { margin: "6px 0 18px" } },
+      `Orange = pushes price up · blue = down · green = stable · grey = not enough data. Confidence: ${CONF_WORD[L.evidence_confidence] || "—"}.`));
 
-    // 5. historical context
+    // 4. past surges
     const an = L.analogue || {};
-    main.appendChild(h("section", { class: "card", style: { marginTop: "16px" } }, h("div", { class: "kicker" }, "Historical context"),
-      h("div", { class: "big-line" }, an.id ? h("span", {}, `Current conditions resemble the start of ${an.id} (${fmtD(an.start)}) · `, link("#/inflection/" + an.id, "View comparison →")) : "No strong historical analogue"),
+    main.appendChild(h("section", { class: "card" }, h("div", { class: "kicker" }, an.id ? `Most like ${an.id} (${an.similarity}% similar)` : "Past price surges · no strong match to today"),
       h("table", { class: "past" }, h("tbody", {}, I.slice().reverse().map((f) => h("tr", { class: "click", onclick: () => { location.hash = "#/inflection/" + f.id; } },
         h("td", {}, new Date(f.price_onset.best + "T00:00:00Z").toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })),
         h("td", {}, (f.story || {}).diagnosis ? f.story.diagnosis.split(";")[0].split(",")[0].replace(/\.$/, "") : f.driver.type),
-        h("td", { class: "num " + (f.direction === "up" ? "up" : "down") }, pct(f.magnitude, 0)), h("td", { class: "num" }, link("#/inflection/" + f.id, "Analysis →")))))),
-      h("div", { class: "tiny muted" }, `${I.length} past inflections — too few for firm statistics. `, link("#/history", "All history →"))));
+        h("td", { class: "num " + (f.direction === "up" ? "up" : "down") }, pct(f.magnitude, 0)), h("td", { class: "num" }, "→")))))));
   }
 
   async function pagePrice(main) {

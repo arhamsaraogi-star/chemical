@@ -113,3 +113,28 @@ def test_all_invalid_is_a_failure_not_an_overwrite(tmp_path):
     st = runner.run_collector(Fake(_rows(["2026-09-02"], [-1.0])), data_dir=tmp_path, now="2026-10-01")
     assert st["status"] == "failed"
     assert len(runner.read_store("fake", tmp_path)) == 1
+
+
+@pytest.mark.parametrize("fixture,series,ref,date,value", [
+    ("baiinfo_range_t.html", "feed.naphthalene_industrial", "2023-09-27", "2023-09-27", 6075.0),
+    ("baiinfo_range_kg.html", "dye.reactive", "2023-12-03", "2023-12-01", 20500.0),
+    ("baiinfo_range_bc.html", "feed.naphthalene_refined", "2025-03-26", "2025-03-26", 7765.0),
+])
+def test_baiinfo_range_notes_use_midpoint(fixture, series, ref, date, value):
+    """Older archived notes quote a range; the midpoint is used and labelled, at lower confidence."""
+    r = parse_note(fx(fixture), PAGE[series], pd.Timestamp(ref))
+    assert r["obs_date"] == pd.Timestamp(date) and r["value"] == value
+    assert r["price_type"] == "range_midpoint" and r["confidence"] < 1
+
+
+def test_archive_extractor_attribution_and_dates():
+    from chem_monitor.ingestion.archive import extract
+    html = ("<html><body><p>2025-06-16 09:00 发布</p><p>本周事件：根据百川盈孚，截至6月13日，H酸市场价格为41750元/吨，月环比+3%。"
+            "本轮H酸加速涨价，截至6月9日，活性染料市场价格23元/公斤。H酸价格创新高。"
+            "据卓创资讯数据，截至8月28日，H酸较上周上涨5元/kg至95元/公斤。</p></body></html>")
+    rows = extract(html, pd.Timestamp("2025-09-01"), "https://example.org/x", "web")
+    got = {(r["obs_date"].strftime("%m-%d"), r["value"], r["source_family"]) for r in rows}
+    assert ("06-13", 41750.0, "baiinfo") in got
+    assert all(r["value"] != 23000 for r in rows)              # dye price is not an H-Acid price
+    assert ("08-28", 95000.0, "sci99") in got
+    assert all(r["obs_date"] <= pd.Timestamp("2025-09-01") for r in rows)

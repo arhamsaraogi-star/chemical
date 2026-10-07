@@ -55,3 +55,44 @@ jobs:
             sleep $((RANDOM % 10 + 5))
           done
           exit 1
+
+  archive-web:
+    # generic Internet Archive targets (article folders, other sites); see chem_monitor/ingestion/archive.py
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        target: [baiinfo_hacid_news, baiinfo_hacid_quotes, baiinfo_dye_intermediates, baiinfo_cn_dye_intermediates, sunsirs_hacid, chemicalbook_hacid]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Archive ${{ matrix.target }}
+        run: |
+          python -u -c "
+          from chem_monitor.ingestion import runner
+          from chem_monitor.ingestion.archive import archive_collectors
+          runner.run_all([c for c in archive_collectors() if c.name == 'archive_${{ matrix.target }}'], 'backfill')
+          "
+      - name: Commit this target's file
+        run: |
+          git config user.name "chem-monitor-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          f="data/observations/archive_${{ matrix.target }}.csv"
+          [ -f "$f" ] || { echo "no data file produced"; exit 0; }
+          cp "$f" /tmp/out.csv
+          for i in 1 2 3 4 5; do
+            git fetch -q origin "${GITHUB_REF_NAME}" && git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            cp /tmp/out.csv "$f"
+            git add "$f"
+            git diff --cached --quiet && { echo "unchanged"; exit 0; }
+            git commit -q -m "data: archive backfill ${{ matrix.target }}"
+            git push -q origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((RANDOM % 10 + 5))
+          done
+          exit 1

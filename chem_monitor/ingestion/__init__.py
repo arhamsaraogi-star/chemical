@@ -15,7 +15,7 @@ def backfill_collectors():
     return [NBSCollector(), ComtradeCollector(), ECBFXCollector()] + wayback_collectors()
 
 
-def wayback_collectors(every_days=3):
+def wayback_collectors(every_days=1):
     """One archive collector per Baiinfo page so they can run in parallel (GitHub Actions matrix)."""
     from .baiinfo import PAGES
     return [BaiinfoWaybackCollector(pages=[p], every_days=every_days, name="baiinfo_wayback_" + p.series.replace(".", "_"))

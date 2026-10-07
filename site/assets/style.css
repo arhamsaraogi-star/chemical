@@ -235,3 +235,9 @@ ul.evidence li { padding: 5px 0; display: grid; grid-template-columns: 16px 140p
 .arrow { font-weight: 700; width: 14px; display: inline-block; text-align: center; }
 table.past td { padding: 8px 10px 8px 0; }
 details.card > summary { cursor: pointer; font-weight: 600; }
+
+.tiles4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tile4 { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; color: var(--ink); }
+.tile4:hover { text-decoration: none; border-color: var(--s1); }
+.tile4 .tile-word { font-size: 18px; margin: 4px 0 6px; }
+@media (max-width: 760px) { .tiles4 { grid-template-columns: 1fr 1fr; } }

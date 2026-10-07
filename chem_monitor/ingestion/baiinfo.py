@@ -45,6 +45,9 @@ DATE_RE = re.compile(r"(?:(20\d\d)年)?(\d{1,2})月(\d{1,2})日")
 NUM = r"([\d,]+(?:\.\d+)?)"
 AVG_RE = re.compile(r"均价(?:为|参考|约|在)?\s*" + NUM + r"\s*(元/吨|元/公斤|元/千克)")
 REF_RE = re.compile(r"(?:出厂参考|参考价|参考)(?:为|至|在)?\s*" + NUM + r"\s*(元/吨|元/公斤|元/千克)")
+# older notes quote a range: "出厂参考6300-6550元/吨", "主流商谈在20-21元/公斤", "报价区间8500—9000元/吨"
+RANGE_RE = re.compile(r"(?:出厂参考|参考|商谈在|商谈|报价区间|报价|成交区间|价格)(?:价|在|为)?\s*" + NUM +
+                      r"\s*[-–—~至]\s*" + NUM + r"\s*(元/吨|元/公斤|元/千克)")
 
 
 def page_text(html: str) -> str:
@@ -83,12 +86,21 @@ def parse_note(html: str, page: Page, ref: pd.Timestamp):
         return None
     obs = infer_date(md, pd.Timestamp(ref).normalize())
     m, price_type, conf = AVG_RE.search(note), "market_average", 1.0
-    if not m:
-        m, price_type, conf = REF_RE.search(note), "ex_works_reference", 0.7
+    unit_grp, v = 2, None
+    if m:
+        v = float(m.group(1).replace(",", ""))
+    else:
+        r = RANGE_RE.search(note)
+        m2 = REF_RE.search(note)
+        if r and (not m2 or r.start() <= m2.start()):
+            m, price_type, conf, unit_grp = r, "range_midpoint", 0.8, 3
+            v = (float(r.group(1).replace(",", "")) + float(r.group(2).replace(",", ""))) / 2
+        elif m2:
+            m, price_type, conf = m2, "ex_works_reference", 0.7
+            v = float(m2.group(1).replace(",", ""))
     if not m:
         return None
-    v = float(m.group(1).replace(",", ""))
-    if m.group(2) in ("元/公斤", "元/千克"):
+    if m.group(unit_grp) in ("元/公斤", "元/千克"):
         v *= 1000
     if not (page.lo <= v <= page.hi):
         return None

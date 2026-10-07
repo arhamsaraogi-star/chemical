@@ -80,7 +80,14 @@ def block_explanations(P: pd.DataFrame, blocks: dict, events: pd.DataFrame, cap:
 
     # DOWNSTREAM
     dye = P.get("dye.reactive", pd.Series(dtype=float)).dropna()
-    if len(dye) >= 2 and dye.index[-1] - dye.index[0] > pd.Timedelta(days=60):
+    rq = P.get("derived.rdye_qty", pd.Series(dtype=float)).dropna()
+    if len(rq):
+        q3, q12 = _chg(rq, 91), _chg(rq, 365)
+        add("DOWNSTREAM", f"Six big dyeing countries imported {rq.iloc[-1]:,.0f} t of Chinese reactive dye in "
+                          f"{rq.index[-1]:%b %Y} ({_pct(q3)} vs three months earlier, {_pct(q12)} vs a year earlier) - "
+                          f"a sign of demand for the dyes H-Acid goes into.",
+            "observed", {"rdye_t": float(rq.iloc[-1]), "rdye_3m": q3, "rdye_12m": q12, "month": f"{rq.index[-1]:%Y-%m}"})
+    elif len(dye) >= 2 and dye.index[-1] - dye.index[0] > pd.Timedelta(days=60):
         add("DOWNSTREAM", f"Reactive dye was ¥{dye.iloc[-1] / 1000:.0f}/kg at the last observation, versus "
                           f"¥{dye.iloc[0] / 1000:.0f}/kg on {dye.index[0]:%d %b %Y}. Too few observations to score yet.",
             "observed", {"last": float(dye.iloc[-1]), "first": float(dye.iloc[0])})
@@ -189,7 +196,7 @@ def inflection_story(f: dict, notes: list) -> dict:
 
 TILE_WORDS = {  # block -> (label, word when it supports a higher price, word when lower, neutral word)
     "SUPPLY": ("Supply", "Tightening", "Loosening", "Stable"),
-    "DOWNSTREAM": ("Demand", "Strengthening", "Weakening", "Stable"),
+    "DOWNSTREAM": ("Dye demand", "Strengthening", "Weakening", "Stable"),
     "COST": ("Feedstock", "Rising", "Falling", "Stable"),
     "TRADE": ("Trade", "Firming", "Softening", "Stable"),
 }
@@ -209,7 +216,7 @@ def tiles(blocks: dict) -> list:
         else:
             word, tone = flat, "flat"
         out.append({"block": b, "label": label, "word": word, "tone": tone, "value": v,
-                    "proxy": "dye prices" if b == "DOWNSTREAM" else None})
+                    "proxy": None})
     return out
 
 
@@ -218,7 +225,8 @@ SHORT = {   # block -> function(numbers) -> short evidence phrase
     "COST": lambda n: f"feedstock index {_pct(n['index_3m'])} in 3 months",
     "TRADE": lambda n: f"export unit value {_pct(n['chg_3m'])} in 3 months ({n['month']})",
     "PRICE": lambda n: f"flat for {n['flat_days']} days after {_pct(n['chg_1m'])} in the prior month",
-    "DOWNSTREAM": lambda n: f"¥{n['last'] / 1000:.0f}/kg now vs ¥{n['first'] / 1000:.0f}/kg in mid-2025; too few points to score",
+    "DOWNSTREAM": lambda n: (f"dye imports from China {_pct(n['rdye_3m'])} in 3 months ({n['month']})" if "rdye_t" in n
+                             else f"¥{n['last'] / 1000:.0f}/kg now vs ¥{n['first'] / 1000:.0f}/kg in mid-2025; too few points to score"),
     "EVENTS": lambda n: f"last recorded event {n['days_since_last']} days ago; effect has faded",
 }
 
