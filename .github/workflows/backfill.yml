@@ -3,9 +3,7 @@
 # land incrementally. Trigger: change .github/backfill.trigger, or run manually.
 name: backfill
 on:
-  push:
-    paths: [".github/backfill.trigger"]
-  workflow_dispatch:
+  workflow_dispatch:      # manual only (Actions -> backfill -> Run workflow)
 permissions:
   contents: write
 jobs:
