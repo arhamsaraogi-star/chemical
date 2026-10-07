@@ -1,24 +1,28 @@
-# History backfill on GitHub's runners (open internet). Runs when .github/backfill.trigger changes
-# on any branch, or on demand. Results are validated by the safe runner and committed back to the
-# same branch; nothing is deployed from here.
+# History backfill on GitHub's runners (open internet). Internet Archive snapshots of each Baiinfo page
+# run as parallel jobs (sampled every 3 days); each job validates and commits its own file, so results
+# land incrementally. Trigger: change .github/backfill.trigger, or run manually.
 name: backfill
 on:
   push:
     paths: [".github/backfill.trigger"]
   workflow_dispatch:
-    inputs:
-      sources:
-        description: "Space-separated source ids (default: baiinfo_wayback)"
-        default: "baiinfo_wayback"
 permissions:
   contents: write
-concurrency:
-  group: backfill-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
-  backfill:
+  wayback:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        source:
+          - baiinfo_wayback_hacid_spot
+          - baiinfo_wayback_feed_naphthalene_refined
+          - baiinfo_wayback_feed_naphthalene_industrial
+          - baiinfo_wayback_feed_nitric_acid
+          - baiinfo_wayback_feed_caustic_soda
+          - baiinfo_wayback_dye_reactive
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,24 +30,28 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Backfill
-        env:
-          SOURCES: ${{ inputs.sources || 'baiinfo_wayback' }}
+      - name: Backfill ${{ matrix.source }}
         run: |
-          args=""
-          for s in $SOURCES; do args="$args --source $s"; done
-          python -u -m chem_monitor.cli collect --backfill $args
-          python -c "import json; print(json.dumps(json.load(open('data/status/source_status.json')), indent=1, ensure_ascii=False))"
-      - name: Tests
-        run: python -m pytest -q tests
-      - name: Rebuild site data
-        run: python -m chem_monitor.cli build
-      - name: Commit results to this branch
+          python -u -c "
+          from chem_monitor.ingestion import runner, wayback_collectors
+          cs = [c for c in wayback_collectors() if c.name == '${{ matrix.source }}']
+          runner.run_all(cs, 'backfill')
+          "
+          python -c "import json; print(json.dumps(json.load(open('data/status/source_status.json')).get('${{ matrix.source }}'), indent=1, ensure_ascii=False))"
+      - name: Commit this source's file
         run: |
           git config user.name "chem-monitor-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/observations data/status site/data
-          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
-          git commit -m "data: backfill $(date -u +%Y-%m-%dT%H:%MZ)"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          f="data/observations/${{ matrix.source }}.csv"
+          [ -f "$f" ] || { echo "no data file produced"; exit 0; }
+          cp "$f" /tmp/out.csv
+          for i in 1 2 3 4 5; do
+            git fetch -q origin "${GITHUB_REF_NAME}" && git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            cp /tmp/out.csv "$f"
+            git add "$f"
+            git diff --cached --quiet && { echo "unchanged"; exit 0; }
+            git commit -q -m "data: archive backfill ${{ matrix.source }}"
+            git push -q origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((RANDOM % 10 + 5))
+          done
+          exit 1

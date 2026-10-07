@@ -6,6 +6,8 @@ H-Acid dominates the code but it also contains J-acid, gamma-acid etc., so unit 
 Two kinds of series:
   export.hacid.qty / .value            China-reported exports to the World (FOB). China's monthly
                                         Comtrade reporting currently ends Dec 2024.
+  mirror.<iso>.rdye.qty / .value       Reactive dyes (HS 320416) imported from China by dyeing countries
+                                        - a downstream-demand proxy.
   mirror.<iso>.hacid.qty / .value      Imports FROM China reported by the destination (CIF). India
                                         (~half of China's exports), Korea and Indonesia keep reporting,
                                         so these mirror series carry the trade signal for 2025->.
@@ -17,7 +19,12 @@ from .base import Collector, http_get
 
 API = "https://comtradeapi.un.org/public/v1/preview/C/M/HS"
 CHINA = 156
-MIRRORS = {699: ("ind", "India"), 410: ("kor", "Korea"), 360: ("idn", "Indonesia")}
+# H-Acid (HS 292221) importers that report monthly and buy from China
+MIRRORS = {699: ("ind", "India"), 410: ("kor", "Korea"), 360: ("idn", "Indonesia"), 792: ("tur", "Turkey"),
+           586: ("pak", "Pakistan"), 704: ("vnm", "Vietnam"), 764: ("tha", "Thailand"), 76: ("bra", "Brazil")}
+# Reactive dyes (HS 320416) imported from China by dyeing countries: a downstream-demand proxy
+RDYE_MIRRORS = {699: ("ind", "India"), 50: ("bgd", "Bangladesh"), 792: ("tur", "Turkey"), 586: ("pak", "Pakistan"),
+                704: ("vnm", "Vietnam"), 360: ("idn", "Indonesia")}
 PUB_LAG = {"export": 45, "mirror": 60}
 
 
@@ -32,8 +39,8 @@ class ComtradeCollector(Collector):
         self.since, self.delay = since, delay
         self.destinations = pd.DataFrame()
 
-    def _get(self, reporter, period, partner, flow):
-        q = f"{API}?reporterCode={reporter}&period={period}&cmdCode=292221&flowCode={flow}"
+    def _get(self, reporter, period, partner, flow, cmd="292221"):
+        q = f"{API}?reporterCode={reporter}&period={period}&cmdCode={cmd}&flowCode={flow}"
         if partner is not None:
             q += f"&partnerCode={partner}"
         js = http_get(q, timeout=60, delay=self.delay).json()
@@ -41,7 +48,7 @@ class ComtradeCollector(Collector):
             raise RuntimeError(js["error"])
         return js.get("data") or [], q
 
-    def _rows(self, data, url, per, prefix, location, kind, value_field):
+    def _rows(self, data, url, per, prefix, location, kind, value_field, grade="HS 292221"):
         if not data:
             return []
         r = data[0]
@@ -50,7 +57,7 @@ class ComtradeCollector(Collector):
         common = {"obs_date": obs, "pub_date": obs + pd.Timedelta(days=PUB_LAG[kind]),
                   "vintage_status": "estimated", "location": location, "market": "export",
                   "price_type": "FOB" if kind == "export" else "CIF (importer-reported)",
-                  "quote_kind": "customs", "grade": "HS 292221", "date_precision": "month",
+                  "quote_kind": "customs", "grade": grade, "date_precision": "month",
                   "value_kind": "observed", "url": url, "confidence": 1.0}
         out = []
         if kg:
@@ -83,6 +90,13 @@ class ComtradeCollector(Collector):
                                        "mirror", "cifvalue")
                 except Exception as e:             # noqa: BLE001
                     errors.append(f"{per} {label}: {e}")
+            for rep, (iso, label) in RDYE_MIRRORS.items():
+                try:
+                    data, url = self._get(rep, per, CHINA, "M", cmd="320416")
+                    rows += self._rows(data, url, per, f"mirror.{iso}.rdye", f"{label} (from China)",
+                                       "mirror", "cifvalue", grade="HS 320416 reactive dyes")
+                except Exception as e:             # noqa: BLE001
+                    errors.append(f"{per} {label} rdye: {e}")
         df = pd.DataFrame(rows)
         df.attrs["errors"] = errors
         self.destinations = pd.DataFrame(dest)

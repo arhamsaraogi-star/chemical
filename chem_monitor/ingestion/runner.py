@@ -15,7 +15,7 @@ from ..config import DATA_DIR
 from ..db import OBS_COLS
 
 KEY = ["obs_date", "source", "series", "location"]
-SERIES_PREFIXES = ("hacid.", "feed.", "dye.", "export.", "mirror.", "ind.")
+SERIES_PREFIXES = ("hacid.", "feed.", "dye.", "export.", "mirror.", "ind.", "fx.")
 MAX_JUMP = 3.0          # reject a value > 3x or < 1/3 of the previous value of the same series
 
 

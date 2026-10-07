@@ -98,6 +98,14 @@ def freshness(status: dict, registry: pd.DataFrame, obs: pd.DataFrame, now: pd.T
     for _, r in registry.iterrows():
         sid = r["source_id"]
         st = status.get(sid, {})
+        parts = [v for k, v in status.items() if k.startswith(sid + "_")]   # per-page archive collectors
+        if not st and parts:
+            ok = [v for v in parts if v.get("last_success")]
+            st = {"status": "ok" if ok and len(ok) == len(parts) else "partial" if ok else "failed",
+                  "last_success": max((v["last_success"] for v in ok), default=None),
+                  "last_attempt": max((v.get("last_attempt") or "" for v in parts), default=None),
+                  "failure_reason": "; ".join(v["failure_reason"] for v in parts if v.get("failure_reason"))[:300] or None,
+                  "last_observation_date": max((v.get("last_observation_date") or "" for v in parts), default=None) or None}
         o = obs[obs["source"] == sid]
         last_obs = st.get("last_observation_date") or (_d(o["obs_date"].max()) if len(o) else None)
         freq = str(r.get("frequency") or "")

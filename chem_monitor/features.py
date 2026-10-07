@@ -58,25 +58,37 @@ def margins(price: pd.Series, cost_idx: pd.Series = None, cost_abs: pd.Series = 
     return out
 
 
+def _mirror_uv(panel, tag):
+    mv = [c for c in panel if c.startswith("mirror.") and c.endswith(f".{tag}.value")]
+    ok = [(a, a.replace(".value", ".qty")) for a in mv if a.replace(".value", ".qty") in panel]
+    if not ok:
+        return None, None
+    val = sum(panel[a].fillna(0) for a, _ in ok)
+    qty = sum(panel[b].fillna(0) for _, b in ok)
+    has = pd.concat([panel[a] for a, _ in ok], axis=1).notna().any(axis=1)
+    return (val / qty.replace(0, np.nan)).where(has), qty.where(has)
+
+
 def export_unit_value(panel: pd.DataFrame):
-    """USD per tonne, HS 292221. Primary signal = importer-reported (mirror) imports from China, summed
-    over the reporting destinations, because China's own monthly reporting stops in Dec 2024. Labelled
-    'unit value' - never an H-Acid spot price."""
+    """USD per tonne. H-Acid (HS 292221): importer-reported (mirror) imports from China summed over the
+    reporting destinations, because China's own monthly reporting stops in Dec 2024. Reactive dyes
+    (HS 320416) the same way, as a downstream-demand proxy. Unit values are labelled as such - never
+    presented as a spot price. CNY conversions use ECB daily USD/CNY."""
     out = {}
     v, q = "export.hacid.value", "export.hacid.qty"
     if v in panel and q in panel:
         out["derived.export_uv_china"] = panel[v] / panel[q].replace(0, np.nan)
-    mv = [c for c in panel if c.startswith("mirror.") and c.endswith(".value")]
-    if mv:
-        mq = [c.replace(".value", ".qty") for c in mv]
-        ok = [(a, b) for a, b in zip(mv, mq) if b in panel]
-        val = sum(panel[a].fillna(0) for a, _ in ok)
-        qty = sum(panel[b].fillna(0) for _, b in ok)
-        has = pd.concat([panel[a] for a, _ in ok], axis=1).notna().any(axis=1)
-        out["derived.export_uv"] = (val / qty.replace(0, np.nan)).where(has)
-        out["derived.export_qty_mirror"] = qty.where(has)
+    uv, qty = _mirror_uv(panel, "hacid")
+    if uv is not None:
+        out["derived.export_uv"], out["derived.export_qty_mirror"] = uv, qty
     elif "derived.export_uv_china" in out:
         out["derived.export_uv"] = out["derived.export_uv_china"]
+    duv, dqty = _mirror_uv(panel, "rdye")
+    if duv is not None:
+        out["derived.rdye_uv"], out["derived.rdye_qty"] = duv, dqty
+    fx = panel.get("fx.usdcny")
+    if fx is not None and "derived.export_uv" in out:
+        out["derived.export_uv_cny"] = out["derived.export_uv"] * fx.ffill()
     return pd.DataFrame(out) if out else None
 
 

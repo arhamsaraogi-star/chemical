@@ -142,8 +142,11 @@ class BaiinfoWaybackCollector(Collector):
     name, tier = "baiinfo_wayback", 2
     CDX = "https://web.archive.org/cdx/search/cdx"
 
-    def __init__(self, pages=PAGES, start="20230901", max_per_page=600, delay=1.5):
+    def __init__(self, pages=PAGES, start="20230901", max_per_page=400, delay=1.0, every_days=3, name=None):
         self.pages, self.start, self.max_per_page, self.delay = pages, start, max_per_page, delay
+        self.every_days = every_days
+        if name:
+            self.name = name
 
     def snapshots(self, path):
         """One capture per day. CDX first; if CDX is unreachable, fall back to the 'available' API
@@ -167,12 +170,13 @@ class BaiinfoWaybackCollector(Collector):
                         out.append((c["timestamp"], c["url"].split("/", 5)[-1]))
                 except Exception:                  # noqa: BLE001
                     continue
-        seen, uniq = set(), []
-        for ts, orig in sorted(out):
-            if ts[:8] not in seen:
-                seen.add(ts[:8])
+        uniq, last = [], None
+        for ts, orig in sorted(out):                # sample: at most one capture every `every_days`
+            d = pd.Timestamp(ts[:8])
+            if last is None or (d - last).days >= self.every_days:
                 uniq.append((ts, orig))
-        print(f"[wayback] {path}: {len(uniq)} daily snapshots", flush=True)
+                last = d
+        print(f"[wayback] {path}: {len(out)} captures, {len(uniq)} sampled (every {self.every_days}d)", flush=True)
         return uniq[-self.max_per_page:]
 
     def fetch(self, mode="backfill"):
@@ -194,7 +198,7 @@ class BaiinfoWaybackCollector(Collector):
                         if self.unparsed <= 3:
                             print(f"[wayback] unparsed {ts} {p.series}: {extract_note(page_text(html))[:160]!r}", flush=True)
                         continue
-                    r = _row(p, parsed, f"https://web.archive.org/web/{ts}/{orig}", self.name,
+                    r = _row(p, parsed, f"https://web.archive.org/web/{ts}/{orig}", "baiinfo_wayback",
                              "Internet Archive")
                     r["raw_text"] = f"[capture {ts}] " + r["raw_text"]
                     rows.append(r)

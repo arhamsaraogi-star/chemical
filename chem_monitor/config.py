@@ -24,7 +24,7 @@ TIER_WEIGHT = {1: 1.0, 2: 0.8, 3: 0.6, 4: 0.3, 5: 0.0}
 MAX_FFILL_DAYS = 10            # default: how long a stale observation may be carried forward (bdays)
 # per-prefix staleness limits (bdays). Sparse / low-frequency series may be carried further, but never
 # across an unobserved gap longer than this: beyond it the panel is NaN and nothing is detected there.
-FFILL_LIMITS = {"hacid.": 45, "dye.": 45, "feed.": 15, "export.": 30, "ind.": 15}
+FFILL_LIMITS = {"hacid.": 45, "dye.": 45, "feed.": 15, "export.": 30, "mirror.": 30, "ind.": 15, "fx.": 5}
 
 # ---- inflection detection
 MOVE_RULES = [(5, 0.05), (20, 0.10), (60, 0.20)]   # (window in business days, |return| threshold)
@@ -61,6 +61,7 @@ COMPONENTS = {
     "inventory":            ("ind.inventory",        "pct",   20, -1),
     "feedstock_cost":       ("derived.cost_idx",     "pct",   20, +1),
     "downstream_dyes":      ("dye.reactive",         "pct",   20, +1),
+    "dye_trade":            ("derived.rdye_qty",     "pct",   21, +1),
     "export_data":          ("derived.export_uv",    "pct",   21, +1),
     "events":               ("derived.event_pressure", "level", 0, +1),
 }
@@ -68,7 +69,7 @@ COMPONENTS = {
 PRIOR_WEIGHTS = {
     "price_momentum": .15, "price_acceleration": .15, "producer_quotes": .10,
     "supply_disruption": .15, "capacity_utilization": .10, "inventory": .10,
-    "feedstock_cost": .10, "downstream_dyes": .05, "export_data": .05, "events": .05,
+    "feedstock_cost": .10, "downstream_dyes": .05, "dye_trade": .05, "export_data": .05, "events": .05,
 }
 # Series built FROM the target price (circular as "leading indicators") - excluded from lead/lag & hit rates
 ENDOGENOUS = {"hacid.spot", "derived.spread_idx", "derived.ratio_idx", "derived.margin_abs", "derived.margin_ratio"}
@@ -87,7 +88,7 @@ BLOCKS = {
     "DEMAND":     [],                       # textile demand indicators: none reliable yet
     "COST":       ["feedstock_cost"],
     "INVENTORY":  ["inventory"],
-    "DOWNSTREAM": ["downstream_dyes"],
+    "DOWNSTREAM": ["downstream_dyes", "dye_trade"],
     "TRADE":      ["export_data"],
     "EVENTS":     ["events"],
 }
