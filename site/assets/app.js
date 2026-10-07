@@ -132,78 +132,121 @@
   }
 
   // ---------------------------------------------------------------- pages
-  async function pageDashboard(main) {
-    const [S, X, ser, meta] = await Promise.all([D("summary"), D("stats"), D("series"), load("data/meta.json")]);
-    const L = S.live || {};
-    const today = S.generated_at ? S.generated_at.slice(0, 10) : null;
-    main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } },
-      h("div", {}, h("div", { class: "kicker" }, "H-Acid · China"), h("h1", {}, "Is a genuine chemical-cycle inflection developing?")),
-      h("div", { class: "chem-strip", "aria-label": "Chemicals monitored" }, (meta.chemicals || []).map((c) =>
-        h("a", { class: "chem-chip" + (c.id === CHEM ? " on" : ""), href: "#/" }, h("span", { class: "dot", style: { background: STATE_COLOR[c.state] || "var(--muted)" } }),
-          c.name, h("b", {}, c.score === null || c.score === undefined ? "—" : String(Math.round(c.score))))))));
+  // plain-language pieces shared by pages
+  const EFFECT_COLOR = { "pushing price up": "var(--s2)", "pushing price down": "var(--s1)", "no clear push": "var(--muted)", "no data": "var(--axis)" };
+  const STATE_PLAIN = {
+    "NORMAL": "No — nothing unusual is building right now.",
+    "WATCH": "Not yet — some pressure is building, worth watching.",
+    "DEVELOPING INFLECTION": "Possibly — a price turn appears to be starting.",
+    "STRONG INFLECTION": "Yes — a strong price turn is under way.",
+    "MAJOR INFLECTION": "Yes — a major price turn is under way.",
+  };
+  function citation(P) {
+    return h("div", { class: "cite" }, `${fmtD(P.date)} · Baiinfo market average · `, kind("observed"), " ",
+      ext(P.url, "source ↗"), P.age_days > 3 ? h("span", { class: "muted" }, ` · ${P.age_days} days old`) : null);
+  }
+  function explainList(items) {
+    return h("div", { class: "explain" }, items.map((e) => h("div", { class: "ex-row" },
+      h("div", { class: "ex-head" }, h("b", {}, e.name), h("span", { class: "pill", style: { "--c": EFFECT_COLOR[e.effect] || "var(--muted)" } }, e.effect)),
+      h("p", {}, e.sentence, " ", kind(e.kind)))));
+  }
+  function glossary() {
+    const terms = [["Inflection", "A point where the price trend clearly changes - e.g. a flat price suddenly starts climbing fast."],
+      ["Score (0–100)", "How unusual and broad today's pressure is. Below 25 = normal, 50+ = an inflection is likely developing."],
+      ["Observed / Derived / Estimated", "Observed = printed by a source. Derived = simple maths on observed numbers. Estimated = relies on a stated assumption."],
+      ["Point-in-time", "Past signals are re-checked using only what was public on that date - no hindsight."],
+      ["Source family", "Websites copying the same original data count as one source, not many."]];
+    return h("details", { class: "card glossary" }, h("summary", {}, "How to read this page (glossary)"),
+      h("dl", { class: "kv" }, terms.map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])));
+  }
 
-    // signal card
+  async function pageDashboard(main) {
+    const [S, X, ser, meta, I] = await Promise.all([D("summary"), D("stats"), D("series"), load("data/meta.json"), D("inflections")]);
+    const L = S.live || {};
     const P = S.price || {};
-    const stColor = STATE_COLOR[L.state] || "var(--muted)";
+    const PL = S.plain || {};
+    const today = S.generated_at ? S.generated_at.slice(0, 10) : null;
+    const latest = I[I.length - 1];
+
+    // 1. plain-English answer
+    main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } },
+      h("div", { class: "kicker" }, "H-Acid · China · a key raw material for textile dyes"),
+      h("div", { class: "chem-strip", "aria-label": "Chemicals monitored" }, (meta.chemicals || []).map((c) =>
+        h("a", { class: "chem-chip" + (c.id === CHEM ? " on" : ""), href: "#/" }, h("span", { class: "dot", style: { background: STATE_COLOR[c.state] || "var(--muted)" } }), c.name)))));
+    const mult = PL.multiple_vs_year_first;
+    const head = `H-Acid costs ${fmtCNY(P.value)} per tonne` + (PL.is_record ? " — a record high" : "") +
+      (mult && mult > 1.3 ? `, ${mult.toFixed(1)}× its price in ${new Date(PL.year_first_date + "T00:00:00Z").toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" })}.` : ".");
+    const hero = h("section", { class: "card hero" },
+      h("h1", { class: "headline" }, head), citation(P),
+      h("div", { class: "qa" },
+        h("div", {}, h("div", { class: "q" }, "Is a new price turn starting right now?"),
+          h("div", { class: "a" }, h("span", { class: "dot", style: { background: STATE_COLOR[L.state] || "var(--muted)" } }), STATE_PLAIN[L.state] || "Not enough data."),
+          h("div", { class: "small muted" }, `Monitor reading: ${L.state} · score ${Math.round(L.score || 0)}/100 · `, link("#/methodology", "what this means"))),
+        h("div", {}, h("div", { class: "q" }, "What is the main pressure on the price today?"),
+          h("div", { class: "a" }, L.driver || "—"),
+          h("div", { class: "small muted" }, ["NORMAL", "WATCH"].includes(L.state) ? "A mild push only - not strong enough to signal a price turn." : "Strong enough to be driving a price turn.", " ", h("a", { href: "#/", onclick: (e) => { e.preventDefault(); const t = document.getElementById("explain"); if (t) t.scrollIntoView({ behavior: "smooth" }); } }, "see all factors ↓"))),
+        latest ? h("div", {}, h("div", { class: "q" }, "What was the most recent big move?"),
+          h("div", { class: "a" }, `${latest.direction === "up" ? "▲ +" : "▼ "}${Math.round(Math.abs(latest.magnitude) * 100)}% since ${fmtD(latest.price_onset.best)}`),
+          h("div", { class: "small muted" }, `${fmtCNY(latest.start_price)} → ${fmtCNY(latest.end_price)} · `, link("#/inflection/" + latest.id, "read the story →"))) : null));
+    main.appendChild(hero);
+
+    // 2. chart + latest surge story
+    const chartCard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "H-Acid price in China (¥ per tonne)"), link("#/h-acid", "All data →")));
+    const story = latest ? h("section", { class: "card" },
+      h("h2", {}, h("span", {}, `The latest price surge (${latest.id})`), link("#/inflection/" + latest.id, "Full analysis →")),
+      h("p", { class: "story" }, latest.story.summary),
+      h("p", {}, h("b", {}, "Diagnosis: "), latest.story.diagnosis, " ", kind("inferred")),
+      latest.story.press.length ? h("div", {}, h("div", { class: "kicker", style: { margin: "12px 0 6px" } }, "What industry press reported at the time"),
+        h("ul", { class: "press" }, latest.story.press.map((n) => h("li", {}, h("span", { class: "muted small" }, fmtD(n.pub_date) + " · " + n.source + " "), ext(n.url, "↗"), h("div", {}, n.summary_en))))) : null,
+      h("p", { class: "tiny muted" }, "Press reports are shown for context; they are cited, not used in the score.")) : null;
+    main.appendChild(h("div", { class: "grid g2", style: { marginTop: "16px" } }, chartCard, story));
+    const evs = await D("events");
+    priceChart(chartCard, ser, { today, height: 300, events: evs.map((e) => ({ date: e.event_date, label: `${e.type}: ${e.company || "industry"}` })) });
+    chartCard.appendChild(h("div", { class: "src-line" }, "Each dot is a real, cited price. The line holds the last known price until the next one; dashed = no public price for over 2½ months. Shaded areas = detected price surges (click one)."));
+
+    // 3. why is it moving
+    main.appendChild(h("div", { class: "section-title", id: "explain" }, h("h2", {}, "Why is the price where it is?"), h("span", { class: "small muted" }, "each factor in one sentence, with the number behind it")));
+    main.appendChild(h("section", { class: "card" }, explainList(S.explain || [])));
+
+    // 4. technical
+    main.appendChild(h("div", { class: "section-title" }, h("h2", {}, "For analysts"), h("span", { class: "small muted" }, "score, signal blocks, data quality")));
     const sc = L.score === null || L.score === undefined ? null : L.score;
+    const stColor = STATE_COLOR[L.state] || "var(--muted)";
     const c = L.confirmation || {};
     const chg = S.changes || {};
     const card = h("section", { class: "card signal", "aria-label": "Current signal" },
-      h("div", { class: "kicker" }, "H-ACID · CHINA MARKET PRICE ", kind("observed")),
-      h("div", { class: "price" }, fmtCNY(P.value), h("span", { class: "unit" }, " / t")),
-      h("div", { class: "small muted" }, `as of ${fmtD(P.date)} · ${P.source_family || ""}${P.age_days > 3 ? ` · ${P.age_days} days old` : ""}`),
-      h("div", { class: "chg-row" }, ["1D", "5D", "20D", "60D", "1Y"].map((k) => h("span", { title: chg[k] ? `vs ${fmtD(chg[k].from_date)} (${fmtCNY(chg[k].from_value)})` : "no observation near the comparison date" },
-        h("span", { class: "muted" }, k + " "), h("b", { class: chg[k] ? dirCls(chg[k].pct) : "muted" }, chg[k] ? pct(chg[k].pct) : "n/a")))),
-      h("div", { class: "state" }, h("span", { class: "dot", style: { background: stColor } }), h("span", { class: "label" }, L.state || "NO DATA"), kind("derived")),
+      h("div", { class: "kicker" }, "Cycle score ", kind("derived")),
+      h("div", { class: "state" }, h("span", { class: "dot", style: { background: stColor } }), h("span", { class: "label" }, L.state || "NO DATA")),
       h("div", { class: "score" }, sc === null ? "—" : Math.round(sc), h("small", {}, " / 100")),
       h("div", { class: "meter", role: "meter", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": sc || 0 }, h("i", { style: { width: (sc || 0) + "%", background: stColor } })),
       h("div", { class: "meter-ticks" }, ["0", "25", "50", "70", "85", "100"].map((x) => h("span", {}, x))),
-      h("p", { class: "small", style: { margin: "10px 0 0" } }, L.sentence || ""),
+      h("div", { class: "chg-row" }, ["1D", "5D", "20D", "60D", "1Y"].map((k) => h("span", { title: chg[k] ? `vs ${fmtD(chg[k].from_date)} (${fmtCNY(chg[k].from_value)})` : "no observation near the comparison date" },
+        h("span", { class: "muted" }, k + " "), h("b", { class: chg[k] ? dirCls(chg[k].pct) : "muted" }, chg[k] ? pct(chg[k].pct) : "n/a")))),
       h("dl", { class: "kv" },
-        h("dt", {}, "Current pressure"), h("dd", {}, L.driver || "—", " ", kind("inferred")),
         h("dt", {}, "Confirmation"), h("dd", {}, c.available !== undefined ? `${c.confirming} / ${c.available} independent information families with data` : "—"),
         h("dt", {}, "Evidence"), h("dd", {}, `${L.evidence_confidence || "—"} confidence · coverage ${L.coverage !== undefined ? Math.round(L.coverage * 100) + "%" : "—"}`),
-        h("dt", {}, "Detected"), h("dd", {}, L.detected_since ? `since ${fmtD(L.detected_since)}` : "No active alert"),
-        h("dt", {}, "Data quality"), h("dd", {}, Math.round((S.quality.overall || 0) * 100) + "%", " ", link("#/quality", "details")),
+        h("dt", {}, "Alert"), h("dd", {}, L.detected_since ? `active since ${fmtD(L.detected_since)}` : "No active alert"),
+        h("dt", {}, "Analogue"), h("dd", {}, (L.analogue || {}).id ? `${L.analogue.id} · ${L.analogue.similarity}%` : ((L.analogue || {}).label || "—")),
+        h("dt", {}, "Inflections"), h("dd", {}, `${X.n_inflections} `, sampleNote(X.n_inflections, X.sample_label)),
         h("dt", {}, "Score as of"), h("dd", {}, fmtD(L.as_of), " ", h("span", { class: "muted tiny" }, "(point-in-time)"))));
-    const chartCard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Price — China market average (CNY/t)"), link("#/h-acid", "All series →")));
-    const hero = h("div", { class: "grid g-hero" }, card, chartCard);
-    main.appendChild(hero);
-    const evs = await D("events");
-    priceChart(chartCard, ser, { today, events: evs.map((e) => ({ date: e.event_date, label: `${e.type}: ${e.company || "industry"}` })) });
-    chartCard.appendChild(sourceLine(ser.series["hacid.spot"] || {}, h("span", {}, "Step line = last observed value; dashed = unobserved gap > 75 days")));
-
-    // why is it moving
-    const why = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Why is it moving?"), h("span", { class: "tiny muted" }, "signal blocks · −1 bearish … +1 bullish · ✓ confirms")),
+    const why = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Signal blocks"), h("span", { class: "tiny muted" }, "−1 bearish … +1 bullish · ✓ confirms")),
       blocksList(L.blocks || {}, c),
       h("p", { class: "tiny muted", style: { marginBottom: 0 } }, "Correlated indicators are averaged inside a block, so the H-Acid price and producer quotes count once. ", link("#/methodology", "How blocks work")));
-    // context
-    const an = L.analogue || {};
-    const ev = (L.events || {});
-    const lastInf = (X.inflections || []).slice(-1)[0];
-    const ctx = h("section", { class: "card" }, h("h2", {}, "Historical context"),
-      h("dl", { class: "kv", style: { marginTop: 0 } },
-        h("dt", {}, "Closest analogue"), h("dd", {}, an.id ? h("span", {}, link("#/inflection/" + an.id, `${an.id} (${fmtD(an.start)})`), ` · similarity ${an.similarity}% · ${an.label}`) : (an.label || "No strong historical analogue")),
-        h("dt", {}, "Inflections found"), h("dd", {}, `${X.n_inflections} since ${ser.series["hacid.spot"] ? fmtD(ser.series["hacid.spot"].points[0][0]) : "—"} `, sampleNote(X.n_inflections, X.sample_label)),
-        h("dt", {}, "Most recent"), h("dd", {}, lastInf ? h("span", {}, link("#/inflection/" + lastInf.id, lastInf.id), ` ${lastInf.direction === "up" ? "▲" : "▼"} ${pct(lastInf.magnitude)} from ${fmtD(String(lastInf.start).slice(0, 10))}`) : "—"),
-        h("dt", {}, "Last known event"), h("dd", {}, ev.last_event ? `${fmtD(ev.last_event.event_date)} — ${ev.last_event.event_type} ${ev.last_event.company}` : "—"),
-        h("dt", {}, "Residual event pressure"), h("dd", {}, `${fmtN(ev.residual_pressure, 2)} · ${ev.text || ""}`)),
-      h("p", { style: { marginBottom: 0 } }, link("#/history", "View forensic analysis →")));
-    main.appendChild(h("div", { class: "grid g2", style: { marginTop: "16px" } }, why, ctx));
+    main.appendChild(h("div", { class: "grid g2" }, card, why));
 
-    // quality + freshness
     const Q = S.quality;
     const qcard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Data quality ", h("b", {}, Math.round(Q.overall * 100) + "%")), link("#/quality", "Details →")),
       h("div", { class: "table-wrap" }, h("table", {}, h("tbody", {}, Q.groups.map((g) => h("tr", {}, h("td", {}, g.group), h("td", { class: "num" }, Math.round(g.coverage * 100) + "%"),
         h("td", {}, statusDot(g.coverage >= 0.9 ? "good" : g.coverage >= 0.6 ? "partial" : g.coverage > 0 ? "sparse" : "none", g.coverage >= 0.9 ? "var(--good)" : g.coverage >= 0.6 ? "var(--warning)" : "var(--critical)"))))))),
       h("p", { class: "tiny muted", style: { marginBottom: 0 } }, `Point-in-time: ${Math.round(Q.overall_pit_coverage * 100)}% of records (confirmed ${Math.round(Q.confirmed_share * 100)}%, estimated ${Math.round(Q.estimated_share * 100)}%, unknown ${Math.round(Q.unknown_share * 100)}%) · ${Q.independent_families} independent source families · coverage over trailing ${Q.window_days} days`));
-    const fcard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "Source freshness"), link("#/sources", "All sources →")),
-      h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Source"), h("th", {}, "Last observation"), h("th", {}, "Status"))),
+    const fcard = h("section", { class: "card" }, h("h2", {}, h("span", {}, "How fresh is the data?"), link("#/sources", "All sources →")),
+      h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Source"), h("th", {}, "Latest data"), h("th", {}, "Status"))),
         h("tbody", {}, (S.freshness || []).filter((f) => f.last_observation_date || f.collector_status === "failed").map((f) => h("tr", {}, h("td", {}, f.name.split(" - ")[0].split(" (")[0]),
           h("td", { class: "num" }, f.last_observation_date ? `${fmtD(f.last_observation_date)}` : "—", f.age_days !== null && f.age_days !== undefined ? h("span", { class: "muted" }, ` · ${f.age_days}d`) : null),
           h("td", {}, statusDot(f.collector_status, { ok: "var(--good)", partial: "var(--warning)", curated: "var(--s1)", stale: "var(--warning)", failed: "var(--critical)" }[f.collector_status] || "var(--muted)"))))))),
-      h("p", { class: "tiny muted", style: { marginBottom: 0 } }, "Monthly trade data is never 'live': it arrives ~2 months after the month it describes."));
+      h("p", { class: "tiny muted", style: { marginBottom: 0 } }, "Prices update each working day; trade data arrives about two months late."));
     main.appendChild(h("div", { class: "grid g2", style: { marginTop: "16px" } }, qcard, fcard));
+    main.appendChild(glossary());
   }
 
   async function pageDetail(main) {
@@ -247,7 +290,12 @@
   async function pageHistory(main) {
     const [X, I] = await Promise.all([D("stats"), D("inflections")]);
     main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } }, h("div", {}, h("div", { class: "kicker" }, "H-Acid"), h("h1", {}, "History & inflections")), sampleNote(X.n_inflections, X.sample_label)));
-    main.appendChild(h("p", { class: "lede" }, "Inflections are detected on the economic timeline (when prices actually moved). System detection is tested on the information timeline - using only data that was public at the time."));
+    main.appendChild(h("p", { class: "lede" }, "Each card is a period when the H-Acid price clearly changed direction or speed. Click one for the full story. (Technical note: moves are found on the timeline of when prices actually moved; early-warning detection is tested using only data that was public at the time.)"));
+    main.appendChild(h("div", { class: "grid g3", style: { marginBottom: "16px" } }, I.slice().reverse().map((f) => h("a", { class: "card story-card", href: "#/inflection/" + f.id },
+      h("div", { class: "kicker" }, `${f.id} · ${fmtD(f.price_onset.best)}`),
+      h("div", { class: "score " + (f.direction === "up" ? "up" : "down") }, (f.direction === "up" ? "▲ +" : "▼ ") + Math.round(Math.abs(f.magnitude) * 100) + "%"),
+      h("div", { class: "small" }, `${fmtCNY(f.start_price)} → ${fmtCNY(f.end_price)}`),
+      h("p", { class: "small ink2" }, (f.story || {}).diagnosis || "")))));
     main.appendChild(h("div", { class: "card table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["ID", "Onset (best)", "Window", "Direction", "Magnitude", "Driver", "Detection lead", "Confidence"].map((x) => h("th", {}, x)))),
       h("tbody", {}, I.slice().reverse().map((f) => h("tr", { class: "click", onclick: () => { location.hash = "#/inflection/" + f.id; } },
         h("td", {}, link("#/inflection/" + f.id, f.id)), h("td", { class: "num" }, fmtD(f.price_onset.best)), h("td", { class: "num small" }, `${fmtD(f.price_onset.earliest)} – ${fmtD(f.price_onset.latest)}`),
@@ -265,8 +313,19 @@
     const hr = X.hit_rates || [];
     main.appendChild(h("div", { class: "section-title" }, h("h2", {}, "Leading indicators — hit rates"), h("span", { class: "small muted" }, "share of inflections preceded by a ≥1σ move, vs base rate")));
     if (!hr.length) main.appendChild(h("p", { class: "muted small" }, "Not computable yet: leading-indicator series need ≥120 observations and at least one inflection inside their coverage."));
-    else main.appendChild(h("div", { class: "card table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Variable", "Lead (days)", "N", "Hits", "Hit rate", "Base rate", "Lift", "Sample"].map((x) => h("th", {}, x)))),
-      h("tbody", {}, hr.map((r) => h("tr", {}, h("td", {}, r.variable), h("td", { class: "num" }, r.lead_days), h("td", { class: "num" }, r.n_inflections), h("td", { class: "num" }, r.hits), h("td", { class: "num" }, pct(r.hit_rate, 0)), h("td", { class: "num" }, pct(r.base_rate, 0)), h("td", { class: "num" }, fmtN(r.lift, 2)), h("td", {}, h("span", { class: "tag" }, r.sample_label))))))));
+    else {
+      const ser = await D("series");
+      const lab = (v) => (ser.series[v] || {}).label || v;
+      const best = {};
+      for (const r of hr) if (!best[r.variable] || (r.lift || 0) > (best[r.variable].lift || 0)) best[r.variable] = r;
+      const top = Object.values(best).filter((r) => r.hits > 0).sort((x, y) => (y.lift || 0) - (x.lift || 0));
+      const table = (rows) => h("table", {}, h("thead", {}, h("tr", {}, ["Indicator", "Looked back", "Moves preceded", "Normal chance", "Lift", "Sample"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, rows.map((r) => h("tr", {}, h("td", {}, lab(r.variable)), h("td", { class: "num" }, r.lead_days + " days"), h("td", { class: "num" }, `${r.hits} of ${r.n_inflections}`),
+          h("td", { class: "num" }, pct(r.base_rate, 0).replace("+", "")), h("td", { class: "num" }, fmtN(r.lift, 1) + "×"), h("td", {}, h("span", { class: "tag" }, r.sample_label))))));
+      main.appendChild(h("p", { class: "small ink2" }, top.length ? `Only ${top.length} indicator(s) moved before any of the ${X.n_inflections} price surges, and none before more than one. With so few surges this is a lead to investigate, not proof.` : "No indicator moved before any surge."));
+      if (top.length) main.appendChild(h("div", { class: "card table-wrap" }, table(top)));
+      main.appendChild(h("details", { class: "card", style: { marginTop: "12px" } }, h("summary", {}, `Show all ${hr.length} indicator × look-back combinations`), h("div", { class: "table-wrap" }, table(hr))));
+    }
   }
 
   async function pageInflection(main, id) {
@@ -275,11 +334,25 @@
     if (!f) { main.appendChild(h("p", {}, "Unknown inflection ", id, ". ", link("#/history", "Back to history"))); return; }
     const up = f.direction === "up";
     main.appendChild(h("div", { class: "section-title", style: { marginTop: 0 } }, h("div", {}, h("div", { class: "kicker" }, link("#/history", "History"), " / " + f.id),
-      h("h1", {}, `${f.id} — ${f.driver.type.toUpperCase()} ${up ? "UPWARD" : "DOWNWARD"} INFLECTION`)), h("span", { class: "tag" }, "Confidence: " + f.confidence)));
+      h("h1", {}, `${f.id} — Price ${up ? "surge" : "drop"} from ${fmtD(f.price_onset.best)}: ${pct(f.magnitude, 0)}`)), h("span", { class: "tag" }, "Confidence: " + f.confidence)));
     const po = f.price_onset, fo = f.fundamental_onset;
+    const st = f.story || { summary: "", diagnosis: "", press: [] };
+    const ba = f.before_after || [];
+    const wordCls = (w) => w.indexOf("higher") > 0 ? "up" : w.indexOf("lower") > 0 ? "down" : "muted";
+    main.appendChild(h("section", { class: "card hero" },
+      h("p", { class: "story big" }, st.summary),
+      h("p", {}, h("b", {}, "Diagnosis: "), st.diagnosis, " ", kind("inferred")),
+      h("div", { class: "grid g2", style: { marginTop: "8px" } },
+        h("div", {}, h("div", { class: "kicker", style: { marginBottom: "6px" } }, "What each factor implied for the price (30 days before vs during the move)"),
+          h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Factor"), h("th", {}, "Before"), h("th", {}, "During"))),
+            h("tbody", {}, ba.map((r) => h("tr", {}, h("td", {}, r.name), h("td", { class: wordCls(r.before_word) }, r.before_word), h("td", { class: wordCls(r.during_word) }, r.during_word)))))),
+        h("div", {}, h("div", { class: "kicker", style: { marginBottom: "6px" } }, "What industry press reported (dated, cited)"),
+          st.press.length ? h("ul", { class: "press" }, st.press.map((n) => h("li", {}, h("span", { class: "muted small" }, fmtD(n.pub_date) + " · " + n.source + " "), ext(n.url, "↗"), h("div", {}, n.summary_en))))
+            : h("p", { class: "muted small" }, "No press context recorded for this window.")))));
+    main.appendChild(h("div", { class: "section-title" }, h("h2", {}, "The details"), h("span", { class: "small muted" }, "dates, detection and evidence")));
     const kv = (k, v, kd) => [h("dt", {}, k), h("dd", {}, v, kd ? [" ", kind(kd)] : null)];
     const facts = h("section", { class: "card" }, h("dl", { class: "kv", style: { marginTop: 0 } },
-      kv("Fundamental onset", fo.date ? `${fmtD(fo.date)}${fo.earliest && fo.earliest !== fo.latest ? ` (window ${fmtD(fo.earliest)} – ${fmtD(fo.latest)})` : ""} · ${fo.evidence}` : fo.evidence, "inferred"),
+      kv("Fundamental onset", !fo.date ? fo.evidence : fo.weak ? `Not identified (nearest event: ${fo.evidence}, ${fo.days_before_onset} days earlier)` : `${fmtD(fo.date)}${fo.earliest && fo.earliest !== fo.latest ? ` (window ${fmtD(fo.earliest)} – ${fmtD(fo.latest)})` : ""} · ${fo.evidence}`, "inferred"),
       kv("Publicly observable", fo.public_date ? fmtD(fo.public_date) : "—", fo.public_date ? "observed" : null),
       kv("Price regime onset", `${fmtD(po.best)}${po.exact ? "" : ` · plausible ${fmtD(po.earliest)} – ${fmtD(po.latest)}`}`, "estimated"),
       kv("Onset confidence", `${po.confidence} (spread ${po.spread_days} days)`),

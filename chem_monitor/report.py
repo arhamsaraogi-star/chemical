@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from . import db, store, quality, inflections, classify, leadlag, score, backtest, signals, series as series_mod
+from . import explain, db, store, quality, inflections, classify, leadlag, score, backtest, signals, series as series_mod
 from .config import (DATA_DIR, DB_PATH, SITE_DATA_DIR, TARGET, ALERT_THRESHOLD, FRESHNESS_DAYS, CHEMICAL_ID,
                      BLOCKS, BLOCK_WEIGHTS, BANDS, MOVE_RULES)
 from .ingestion import runner
@@ -30,6 +30,10 @@ SERIES_META = {   # id -> label, unit, kind, block, default-visible
     "mirror.ind.hacid.qty": ("India imports from China HS 292221 - quantity", "t", "observed", "TRADE", False),
     "mirror.kor.hacid.qty": ("Korea imports from China HS 292221 - quantity", "t", "observed", "TRADE", False),
     "mirror.idn.hacid.qty": ("Indonesia imports from China HS 292221 - quantity", "t", "observed", "TRADE", False),
+    "mirror.ind.hacid.value": ("India imports from China HS 292221 - value", "USD", "observed", "TRADE", False),
+    "mirror.kor.hacid.value": ("Korea imports from China HS 292221 - value", "USD", "observed", "TRADE", False),
+    "mirror.idn.hacid.value": ("Indonesia imports from China HS 292221 - value", "USD", "observed", "TRADE", False),
+    "derived.export_qty_mirror": ("Imports from China, 3 reporting countries - quantity", "t", "derived", "TRADE", False),
     "derived.cost_idx": ("Feedstock price index (equal-weight, chain-linked)", "index", "derived", "COST", False),
     "derived.export_uv": ("Import unit value, mirror (HS 292221)", "USD/t", "derived", "TRADE", False),
     "derived.export_uv_china": ("Export unit value, China-reported (HS 292221)", "USD/t", "derived", "TRADE", False),
@@ -114,14 +118,18 @@ def freshness(status: dict, registry: pd.DataFrame, obs: pd.DataFrame, now: pd.T
     return rows
 
 
-def forensic(inf, sens, obs_dates, events_econ, blocks_econ, bt_row, cls_row, infls_before, blocks_pit):
+def forensic(inf, sens, obs_dates, events_econ, blocks_econ, bt_row, cls_row, infls_before, blocks_pit, price=None,
+             notes=None):
     sens_row = sens.loc[inf.trigger] if inf.trigger in sens.index else None
     if sens_row is not None and isinstance(sens_row, pd.DataFrame):
         sens_row = sens_row.iloc[0]
     if sens_row is not None:
         sens_row = sens_row.drop(labels=["spread_days"], errors="ignore")
-    ow = signals.onset_window(inf, sens_row, obs_dates)
+    ow = signals.onset_window(inf, sens_row, obs_dates, price=price)
     fo = signals.fundamental_onset(inf, events_econ, blocks_econ)
+    if fo.get("date"):
+        fo["days_before_onset"] = int((inf.start - pd.Timestamp(fo["date"])).days)
+        fo["weak"] = fo["days_before_onset"] > 45      # too far back to be called the trigger
     det = None if bt_row is None or pd.isna(bt_row.get("score_alert")) else pd.Timestamp(bt_row["score_alert"])
     evaluable = bool(bt_row is not None and bt_row.get("scored_history_available"))
     lead = None if det is None else int((inf.trigger - det).days)
@@ -144,7 +152,7 @@ def forensic(inf, sens, obs_dates, events_econ, blocks_econ, bt_row, cls_row, in
     timeline.sort(key=lambda x: x["date"] or "")
     conf_pts = (ow["confidence"] != "Low") + bool(cls_row is not None and cls_row.get("evidence")) + \
         (fo.get("basis") == "event")
-    return {"id": inf.id, "direction": inf.direction, "magnitude": inf.magnitude, "shape": inf.shape, "rule": inf.rule,
+    out = {"id": inf.id, "direction": inf.direction, "magnitude": inf.magnitude, "shape": inf.shape, "rule": inf.rule,
             "z": inf.z, "start_price": inf.start_price, "end_price": inf.end_price,
             "price_onset": ow, "price_trigger": _d(inf.trigger), "end": _d(inf.end),
             "fundamental_onset": fo,
@@ -161,6 +169,12 @@ def forensic(inf, sens, obs_dates, events_econ, blocks_econ, bt_row, cls_row, in
             "historical_outcome": cls_row.get("historical_outcome") if cls_row is not None else None,
             "analogue": an, "confidence": "High" if conf_pts == 3 else "Medium" if conf_pts == 2 else "Low",
             "timeline": timeline}
+    out["before_after"] = explain.before_after(inf, blocks_econ)
+    lo = pd.Timestamp(ow["earliest"]) - pd.Timedelta(days=30)
+    hi = inf.end + pd.Timedelta(days=60)
+    press = [n for n in (notes or []) if lo <= pd.Timestamp(n["pub_date"]) <= hi]
+    out["story"] = explain.inflection_story(out, press)
+    return out
 
 
 # ---------------------------------------------------------------- main
@@ -220,20 +234,34 @@ def build_site_data(db_path=DB_PATH, data_dir=DATA_DIR, out_dir=SITE_DATA_DIR, n
     bt, bt_sum, fa = backtest.detection_backtest(infls, pit.panel, scored, ALERT_THRESHOLD) if len(infls) else \
         (pd.DataFrame(), {}, pd.DataFrame())
     obs_dates = pd.DatetimeIndex(sorted(tgt_obs["obs_date"].unique()))
+    np_ = data_dir / "curated" / "context_notes.csv"
+    notes = pd.read_csv(np_).to_dict("records") if np_.exists() else []
     forensics = []
     for k, i in enumerate(infls):
         bt_row = bt.set_index("inflection").loc[i.id].to_dict() if len(bt) else None
         cls_row = cls.set_index("inflection").loc[i.id].to_dict() if len(cls) else None
         forensics.append(forensic(i, sens, obs_dates, econ.events, blocks_econ, bt_row, cls_row,
-                                  infls[:k], blocks_pit))
+                                  infls[:k], blocks_pit, price=master["value"], notes=notes))
 
     hits = leadlag.inflection_hit_rates(P, infls) if len(infls) else pd.DataFrame()
     if len(hits):
         hits["sample_label"] = hits["n_inflections"].map(signals.sample_label)
     ll = leadlag.lead_lag_table(P)
 
+    lp = master["value"].dropna()
+    yr = lp[lp.index.year == lp.index[-1].year] if len(lp) else lp
+    plain = {}
+    if len(lp):
+        base = yr.iloc[0] if len(yr) else lp.iloc[0]
+        plain = {"price": float(lp.iloc[-1]), "date": _d(lp.index[-1]),
+                 "is_record": bool(lp.iloc[-1] >= lp.max()), "year_first_value": float(base),
+                 "year_first_date": _d(yr.index[0] if len(yr) else lp.index[0]),
+                 "multiple_vs_year_first": float(lp.iloc[-1] / base),
+                 "latest_inflection": forensics[-1]["id"] if forensics else None}
     summary = {
         "chemical": {"id": CHEMICAL_ID, "name": "H-Acid", "market": "China"},
+        "plain": plain,
+        "explain": explain.block_explanations(P, live.get("blocks", {}), ev, cap, now),
         "generated_at": now.strftime("%Y-%m-%d %H:%M") + " CST",
         "price": None if last_row is None else {
             "value": float(last_price.iloc[-1]), "date": _d(last_price.index[-1]), "unit": "CNY/t",

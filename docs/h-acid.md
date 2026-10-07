@@ -18,7 +18,8 @@
 |---|---|---|
 | Apr–Jul 2025 | 亚东 (Wuhai) fire in April and second accident in June; 楚源 rectification; 裕源 shutdown | Baiinfo ¥36,500 (early Apr) → ¥41,750 (mid-May) → ¥44,000 (24 Jun) |
 | Mar–Apr 2026 | 利元科技 nitration-workshop explosion (19 Mar); nitration deadline end-Mar | ¥40,250 (8 Feb) → ¥47,500 (20 Mar) → ¥61,000 (9 Apr) → ¥65,000 (14 Apr) |
-| Aug–Sep 2026 | peak-season restocking with low inventories; producers lift ex-works quotes to ¥150k | SCI99 ¥95/kg (28 Aug); Baiinfo ~¥130k (mid-Sep) → ¥150,000 (30 Sep) |
+| Jul–Sep 2026 | one-day 31% jump on 28 Jul (Baiinfo); producer 大柴旦和信 +64% to ¥100k; peak-season restocking with low buyer inventories; producers lift ex-works quotes to ¥150k | Baiinfo ¥61,000 (27 Jul) → ¥80,000 (28 Jul); SCI99 ¥95/kg (28 Aug); Baiinfo ~¥130k (mid-Sep) → ¥150,000 (30 Sep) |
 
-Prices between Apr and Aug 2026 are not verified in public sources this project can cite; the site
-leaves that stretch as an unobserved gap rather than interpolating.
+Prices between 14 Apr and 27 Jul 2026 are not verified in public sources this project can cite
+(the 27 Jul figure implies the price eased from ¥65k to ¥61k); the site leaves that stretch as an
+unobserved gap rather than interpolating.

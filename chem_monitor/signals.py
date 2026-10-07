@@ -185,7 +185,7 @@ def analogue(now_vec: pd.Series, blocks: pd.DataFrame, infls, ts, min_gap_days=3
 
 
 # ------------------------------------------------------------------ onset windows
-def onset_window(inf, sens_row, obs_dates: pd.DatetimeIndex, gap_days=30):
+def onset_window(inf, sens_row, obs_dates: pd.DatetimeIndex, gap_days=30, price: pd.Series = None):
     """Best estimate + plausible window for the price-regime onset.
     The window spans (a) the start-date sensitivity range and (b) the real observations bracketing the
     best estimate: with sparse data the move happened somewhere between two observations."""
@@ -201,6 +201,11 @@ def onset_window(inf, sens_row, obs_dates: pd.DatetimeIndex, gap_days=30):
     # started anywhere inside that gap: the window reaches back to the previous observation
     prev = obs_dates[obs_dates < best]
     after_gap = bool(len(prev) and (best - prev[-1]).days > gap_days)
+    if after_gap and price is not None:
+        # only if the price actually moved in the move's direction during the gap
+        p0 = price.asof(prev[-1])
+        moved = pd.notna(p0) and p0 > 0 and inf.sign * (inf.start_price / p0 - 1) > 0.02
+        after_gap = bool(moved)
     if after_gap:
         cands.append(prev[-1])
     lo, hi = min(cands), max(cands)
