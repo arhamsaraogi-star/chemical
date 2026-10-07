@@ -1,0 +1,9 @@
+pandas>=2.1
+numpy>=1.24
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=4.9
+pytest>=7.4
+# optional
+statsmodels>=0.14   # Granger "predictive lead" tests in lead-lag research
+matplotlib>=3.7     # offline forensic chart (out/forensics.png)

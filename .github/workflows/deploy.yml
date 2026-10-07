@@ -1,0 +1,47 @@
+# Publishes site/ to GitHub Pages. Repository settings -> Pages -> Source: "GitHub Actions".
+name: deploy
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "chem_monitor/**", "data/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Pull latest data commit (when called after a data update)
+        run: git pull --ff-only origin "${GITHUB_REF_NAME}" || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Tests
+        run: python -m pytest -q tests
+      - name: Build site data from the committed CSV store
+        run: python -m chem_monitor.cli build
+      - run: touch site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

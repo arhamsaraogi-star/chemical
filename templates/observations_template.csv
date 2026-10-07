@@ -1,0 +1,2 @@
+obs_date,pub_date,source,source_family,tier,series,location,value,currency,unit,price_type,market,quote_kind,grade,url,confidence,raw_text
+2025-06-24,2025-06-24,example_source,example_family,2,hacid.spot,East China,44000,CNY,t,spot,domestic,transaction,,https://example.invalid,1.0,"paste the original text here"

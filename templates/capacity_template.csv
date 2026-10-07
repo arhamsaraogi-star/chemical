@@ -1,0 +1,2 @@
+producer,eff_date,published_at,location,nominal_t,utilization,availability,status,note
+ExampleCo,2025-06-22,2025-07-05,Jiangsu,20000,0.8,0,shutdown,"status: operating | shutdown | retired; published_at = when the market could know it"

@@ -1,0 +1,2 @@
+event_date,announce_date,event_ts,event_type,company,capacity_t,direction,severity,source,url,note
+2025-06-22,2025-06-24,2025-06-22 14:35 CST,environmental,ExampleCo,20000,-1,3,example_source,https://example.invalid,"direction = effect on SUPPLY (-1 down, +1 up); leave announce_date blank if unknown"

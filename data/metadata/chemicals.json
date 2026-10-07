@@ -1,0 +1,20 @@
+{
+  "chemicals": [
+    {
+      "id": "hacid",
+      "name": "H-Acid",
+      "aliases": ["H酸", "1-amino-8-naphthol-3,6-disulfonic acid", "1-氨基-8-萘酚-3,6-二磺酸"],
+      "cas": "90-20-0",
+      "hs_code": "292221 (aminohydroxynaphthalenesulphonic acids and salts; not exclusive to H-Acid)",
+      "market": "domestic",
+      "country": "CN",
+      "target_series": "hacid.spot",
+      "price_series": ["hacid.spot", "hacid.quote"],
+      "feedstocks": ["feed.naphthalene_refined", "feed.naphthalene_industrial", "feed.sulfuric_acid", "feed.nitric_acid", "feed.caustic_soda"],
+      "downstream": ["dye.reactive", "dye.reactive_black_sci99"],
+      "trade": ["export.hacid.qty", "export.hacid.value", "mirror.ind.hacid.qty", "mirror.kor.hacid.qty", "mirror.idn.hacid.qty"],
+      "active": true,
+      "notes": "Reference implementation. Key coupling component of reactive dyes (30-50% of reactive dye cost per broker notes)."
+    }
+  ]
+}

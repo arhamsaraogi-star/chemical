@@ -1,0 +1,7 @@
+source,source_family,tier,covers_hacid_price,covers_feedstock,covers_plant_events,covers_capacity,covers_dyes,covers_exports,frequency,history_starts,gives_publication_date,access,terms_checked,reliability_notes,status
+Baiinfo (百川盈孚),baiinfo,2,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,licensed?,no,,not started
+SunSirs (生意社),sunsirs,2,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,no,,not started
+Guidechem (盖德化工),guidechem,2,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,no,,not started
+ChemicalBook,chemicalbook,2,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,no,,not started
+China Customs,china_customs,1,no,no,no,no,no,TBD,monthly,TBD,TBD,TBD,no,,not started
+Company disclosures,company,1,TBD,TBD,TBD,TBD,TBD,TBD,event,TBD,TBD,free,no,,not started

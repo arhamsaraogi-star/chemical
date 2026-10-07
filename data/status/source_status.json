@@ -1,0 +1,16 @@
+{
+  "baiinfo_public": {
+    "failure_reason": null,
+    "last_attempt": "2026-10-07T07:04:57Z",
+    "last_observation_date": "2026-09-30",
+    "last_success": "2026-10-07T07:04:57Z",
+    "mode": "live",
+    "rows_fetched": 6,
+    "rows_new": 6,
+    "rows_rejected": [],
+    "rows_revised": 0,
+    "rows_total": 6,
+    "status": "ok",
+    "warnings": []
+  }
+}

@@ -1,0 +1,12 @@
+producer,eff_date,published_at,location,nominal_t,utilization,availability,status,value_kind,url,note
+yadong,2023-10-01,2025-06-25,Inner Mongolia,20000,,1.0,operating,observed,https://finance.sina.com.cn/roll/2025-06-25/doc-infchkck8064234.shtml,"Baseline: 20,000 t/yr, >30% of effective domestic supply (Minsheng, 25 Jun 2025)"
+yadong,2025-04-05,2025-06-11,Inner Mongolia,20000,,0.5,disrupted,estimated,https://finance.sina.com.cn/roll/2025-06-11/doc-inezrxpn5004536.shtml,"April 2025 fire. Availability 0.5 is a model assumption for 'disrupted' (no published utilisation)"
+yadong,2025-06-20,2025-07-01,Inner Mongolia,20000,,0.5,disrupted,estimated,https://www.cls.cn/detail/2072957,"June 2025 accident, capacity affected. Availability assumed"
+yadong,2026-09-01,2026-09-01,Inner Mongolia,20000,,1.0,operating,inferred,https://news.qq.com/rain/a/20260901A04MSB00,"Issuing ex-works quotes (150k CNY/t) => selling; operating status inferred"
+chuyuan,2023-10-01,2025-06-09,Hubei,30000,,1.0,operating,observed,https://www.sina.cn/news/detail/5175711499290401.html,"Baseline nominal 30,000 t/yr"
+chuyuan,2025-06-09,2025-06-09,Hubei,30000,,0.5,reduced,estimated,https://www.sina.cn/news/detail/5175711499290401.html,"Output cut for environmental rectification; availability assumed"
+yuyuan,2023-10-01,2025-06-09,Shandong,10000,,1.0,operating,observed,https://www.sina.cn/news/detail/5175711499290401.html,"Baseline nominal 10,000 t/yr"
+yuyuan,2025-06-09,2025-06-09,Shandong,10000,,0.0,shutdown,observed,https://www.sina.cn/news/detail/5175711499290401.html,"Stopped under environmental controls"
+runtu,2023-10-01,2025-07-07,Jiangsu,20000,,0.0,shutdown,observed,https://www.bhi.com.cn/News/ShowDetails.aspx?columns=31&id=90111841,"Jiangsu Mingsheng H-Acid plant idle since 2023 (company statement)"
+jihua,2025-07-01,2025-07-01,Zhejiang,20000,,0.0,shutdown,observed,https://www.cls.cn/detail/2072977,"H-Acid unit stopped"
+longsheng,2025-07-07,2025-07-07,Inner Mongolia,10000,,0.5,trial,estimated,https://www.bhi.com.cn/News/ShowDetails.aspx?columns=31&id=90111841,"10,000 t/yr line (of 20,000 approved) partly in trial; availability assumed"
