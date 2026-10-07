@@ -26,6 +26,13 @@ def _chg(s: pd.Series, days: int, end=None):
     return float(b / a - 1)
 
 
+def _last_real(s: pd.Series):
+    """Date of the last genuine change (ignores values carried forward on the panel)."""
+    s = s.dropna()
+    ch = s[s.ne(s.shift())]
+    return ch.index[-1] if len(ch) else s.index[-1]
+
+
 def _pct(x):
     return "n/a" if x is None else f"{x * 100:+.0f}%"
 
@@ -82,11 +89,12 @@ def block_explanations(P: pd.DataFrame, blocks: dict, events: pd.DataFrame, cap:
     dye = P.get("dye.reactive", pd.Series(dtype=float)).dropna()
     rq = P.get("derived.rdye_qty", pd.Series(dtype=float)).dropna()
     if len(rq):
-        q3, q12 = _chg(rq, 91), _chg(rq, 365)
-        add("DOWNSTREAM", f"Six big dyeing countries imported {rq.iloc[-1]:,.0f} t of Chinese reactive dye in "
-                          f"{rq.index[-1]:%b %Y} ({_pct(q3)} vs three months earlier, {_pct(q12)} vs a year earlier) - "
+        lr = _last_real(rq)
+        q3, q12 = _chg(rq, 91, lr), _chg(rq, 365, lr)
+        add("DOWNSTREAM", f"Six big dyeing countries imported {rq.asof(lr):,.0f} t of Chinese reactive dye in "
+                          f"{lr:%b %Y} ({_pct(q3)} vs three months earlier, {_pct(q12)} vs a year earlier) - "
                           f"a sign of demand for the dyes H-Acid goes into.",
-            "observed", {"rdye_t": float(rq.iloc[-1]), "rdye_3m": q3, "rdye_12m": q12, "month": f"{rq.index[-1]:%Y-%m}"})
+            "observed", {"rdye_t": float(rq.asof(lr)), "rdye_3m": q3, "rdye_12m": q12, "month": f"{lr:%Y-%m}"})
     elif len(dye) >= 2 and dye.index[-1] - dye.index[0] > pd.Timedelta(days=60):
         add("DOWNSTREAM", f"Reactive dye was ¥{dye.iloc[-1] / 1000:.0f}/kg at the last observation, versus "
                           f"¥{dye.iloc[0] / 1000:.0f}/kg on {dye.index[0]:%d %b %Y}. Too few observations to score yet.",
@@ -98,11 +106,12 @@ def block_explanations(P: pd.DataFrame, blocks: dict, events: pd.DataFrame, cap:
     # TRADE
     uv = P.get("derived.export_uv", pd.Series(dtype=float)).dropna()
     if len(uv):
-        u3, u12 = _chg(uv, 91), _chg(uv, 365)
-        add("TRADE", f"Foreign buyers paid about ${uv.iloc[-1]:,.0f}/t for Chinese H-Acid-type acids in "
-                     f"{uv.index[-1]:%b %Y} ({_pct(u3)} vs three months earlier, {_pct(u12)} vs a year earlier). "
+        lr = _last_real(uv)
+        u3, u12 = _chg(uv, 91, lr), _chg(uv, 365, lr)
+        add("TRADE", f"Foreign buyers paid about ${uv.asof(lr):,.0f}/t for Chinese H-Acid-type acids in "
+                     f"{lr:%b %Y} ({_pct(u3)} vs three months earlier, {_pct(u12)} vs a year earlier). "
                      "Trade data arrives about two months late.",
-            "derived", {"usd_per_t": float(uv.iloc[-1]), "chg_3m": u3, "chg_12m": u12, "month": f"{uv.index[-1]:%Y-%m}"})
+            "derived", {"usd_per_t": float(uv.asof(lr)), "chg_3m": u3, "chg_12m": u12, "month": f"{lr:%Y-%m}"})
     else:
         add("TRADE", "No trade data.", "observed")
 
