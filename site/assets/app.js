@@ -239,7 +239,7 @@
 
     // 4. past surges
     const an = L.analogue || {};
-    main.appendChild(h("section", { class: "card" }, h("div", { class: "kicker" }, an.id ? `Most like ${an.id} (${an.similarity}% similar)` : "Past price surges · no strong match to today"),
+    main.appendChild(h("section", { class: "card" }, h("div", { class: "kicker" }, an.id ? `Most like ${an.id} (${an.similarity}% similar)` : "Past price moves · no strong match to today"),
       h("table", { class: "past" }, h("tbody", {}, I.slice().reverse().map((f) => h("tr", { class: "click", onclick: () => { location.hash = "#/inflection/" + f.id; } },
         h("td", {}, new Date(f.price_onset.best + "T00:00:00Z").toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })),
         h("td", {}, (f.story || {}).diagnosis ? f.story.diagnosis.split(";")[0].split(",")[0].replace(/\.$/, "") : f.driver.type),
