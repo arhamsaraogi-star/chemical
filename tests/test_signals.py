@@ -137,3 +137,26 @@ def test_freshness_flags_stale_source():
     obs = pd.DataFrame({"source": [], "obs_date": [], "vintage_status": []})
     f = report.freshness(st, reg, obs, pd.Timestamp("2026-10-07"))
     assert f[0]["collector_status"] == "stale" and f[0]["age_days"] == 36
+
+
+def test_notify_only_reports_changes():
+    from chem_monitor.notify import digest
+    base = {"price": {"value": 150000, "date": "2026-09-30"}, "live": {"state": "NORMAL", "score": 10},
+            "n_inflections": 3, "tiles": [{"block": "COST", "label": "Feedstock", "word": "Falling"}], "headline": "h"}
+    assert digest(base, base, [], [], "u") == ""
+    new = {**base, "price": {"value": 156000, "date": "2026-10-08"}, "live": {"state": "WATCH", "score": 31}}
+    t = digest(base, new, [], [{"name": "Baiinfo", "collector_status": "failed"}], "u")
+    assert "¥156,000" in t and "+4.0%" in t and "NORMAL → **WATCH**" in t and "Baiinfo failed" in t
+
+
+def test_mirror_chain_is_like_for_like():
+    """A reporter dropping out must not look like a collapse in trade."""
+    from chem_monitor.features import mirror_chain
+    rows = []
+    for m, reps in (("2026-01-31", {"ind": 100, "pak": 900}), ("2026-02-28", {"ind": 110})):
+        for r, q in reps.items():
+            rows += [{"obs_date": pd.Timestamp(m), "series": f"mirror.{r}.rdye.qty", "value": q},
+                     {"obs_date": pd.Timestamp(m), "series": f"mirror.{r}.rdye.value", "value": q * 5000}]
+    mc = mirror_chain(pd.DataFrame(rows), "rdye")
+    assert mc["qty_index"].iloc[-1] == pytest.approx(110.0)        # +10% (India only), not -89%
+    assert mc["uv"].iloc[-1] == pytest.approx(5000.0)

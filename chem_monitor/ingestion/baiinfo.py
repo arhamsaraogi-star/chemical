@@ -168,7 +168,7 @@ class BaiinfoWaybackCollector(Collector):
             q = (f"{self.CDX}?url={host}/{path}&output=json&from={self.start}&fl=timestamp,original,digest"
                  "&filter=statuscode:200&collapse=digest")
             try:
-                js = http_get(q, timeout=90, delay=self.delay).json()
+                js = http_get(q, timeout=45, retries=2, delay=self.delay).json()   # fail fast
                 out += [tuple(r[:2]) for r in js[1:]]
             except Exception as e:                 # noqa: BLE001 - archive hiccups are normal
                 print(f"[wayback] CDX failed for {host}/{path}: {e}", flush=True)

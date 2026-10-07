@@ -85,6 +85,10 @@ python -m chem_monitor.cli demo                # synthetic end-to-end check (fak
 
 ## Automated updates
 
+* **Daily notifications:** after each daily run the workflow compares today's summary with yesterday's
+  and, if the price, cycle state, drivers or a data source changed, comments on the GitHub issue
+  **"Daily H-Acid updates"** and @mentions the owner (GitHub e-mails you). Quiet days post nothing.
+
 * `.github/workflows/update-data.yml` runs twice each weekday and on demand (tick **backfill** for
   history). A source that fails keeps its previous data. Its status, last success and failure
   reason appear on the site's *Data quality* page.

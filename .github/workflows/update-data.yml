@@ -3,8 +3,8 @@
 name: update-data
 on:
   schedule:
-    - cron: "37 2 * * 1-5"    # 10:37 China time, after Baiinfo's morning notes
-    - cron: "37 10 * * 1-5"   # 18:37 China time, catches late notes / NBS releases
+    - cron: "37 2 * * *"      # daily 10:37 China time, after Baiinfo's morning notes
+    - cron: "37 10 * * 1-5"   # weekdays 18:37 China time, catches late notes / NBS releases
   workflow_dispatch:
     inputs:
       backfill:
@@ -15,6 +15,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write
 concurrency:
   group: data-and-pages
   cancel-in-progress: false
@@ -38,8 +39,30 @@ jobs:
         run: python -m chem_monitor.cli collect --backfill
       - name: Tests (must pass before anything is published)
         run: python -m pytest -q tests
+      - name: Keep yesterday's summary for the change digest
+        run: |
+          mkdir -p /tmp/prev
+          cp site/data/hacid/summary.json /tmp/prev/summary.json 2>/dev/null || echo '{}' > /tmp/prev/summary.json
       - name: Rebuild analytics and site data
         run: python -m chem_monitor.cli build
+      - name: Notify on changes (comment on the "Daily H-Acid updates" issue)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          python -m chem_monitor.notify /tmp/prev/summary.json site/data/hacid/summary.json \
+            site/data/hacid/inflections.json site/data/sources.json /tmp/digest.md
+          if [ -s /tmp/digest.md ]; then
+            printf '\n\n@%s' "$OWNER" >> /tmp/digest.md
+            n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Daily H-Acid updates"' --json number --jq '.[0].number')
+            if [ -z "$n" ]; then
+              gh label create updates --repo "$GITHUB_REPOSITORY" --color 1f6feb --force >/dev/null 2>&1 || true
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "Daily H-Acid updates" --label updates \
+                --body "The monitor comments here whenever the price, cycle state, drivers or data sources change. Subscribe to get e-mails."
+              n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Daily H-Acid updates"' --json number --jq '.[0].number')
+            fi
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body-file /tmp/digest.md
+          fi
       - name: Commit data snapshot if changed
         id: commit
         run: |

@@ -112,7 +112,8 @@ def extract(html: str, capture: pd.Timestamp, url: str, default_family: str, max
         if obs > capture.normalize() or (capture - obs).days > max_age_days:
             continue
         fam = next((f for k, f in PUBLISHERS if k in s), default_family)
-        series = "hacid.quote" if ("出厂" in s and not any(x in s for x in ("均价", "市场价"))) else "hacid.spot"
+        # "出厂参考" = a market reference (spot series); a company's "出厂价/出厂报价" = producer quote
+        series = "hacid.quote" if re.search(r"出厂价|出厂报价", s) and "出厂参考" not in s else "hacid.spot"
         key = (obs, series, round(v))
         if key in seen:
             continue
@@ -122,7 +123,7 @@ def extract(html: str, capture: pd.Timestamp, url: str, default_family: str, max
                     "price_type": "range_midpoint" if b else ("ex_works" if series == "hacid.quote" else "market"),
                     "market": "domestic", "quote_kind": "archived_text", "value_kind": "observed",
                     "confidence": 0.7 if b else 0.8, "date_precision": "day", "republisher": "Internet Archive",
-                    "url": url, "raw_text": f"[capture {capture:%Y-%m-%d}] " + s.strip()[:400]})
+                    "url": url, "raw_text": f"[capture {capture:%Y-%m-%d}] " + s[max(0, s.find(pm.group(0)) - 80): s.find(pm.group(0)) + 60].strip()})
     return out
 
 

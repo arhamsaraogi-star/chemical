@@ -53,6 +53,19 @@ def build_dataset(path=DB_PATH, time_axis="economic", as_of=None, vintage_policy
     if uv is not None:
         for c in uv:
             panel[c] = uv[c]
+    # like-for-like mirror aggregates from raw monthly records (replace the naive panel sums)
+    dcol = "obs_date" if time_axis == "economic" else "known_date"
+    for tag, (uvc, qc) in {"hacid": ("derived.export_uv", "derived.export_qty_mirror"),
+                           "rdye": ("derived.rdye_uv", "derived.rdye_qty")}.items():
+        mc = features.mirror_chain(obs, tag, dcol)
+        if mc is not None:
+            mc = mc[mc.index <= idx[-1]]
+            pos = idx.searchsorted(mc.index).clip(max=len(idx) - 1)
+            for src, dst in (("uv", uvc), ("qty_index", qc)):
+                s_ = pd.Series(mc[src].to_numpy(), index=idx[pos]).groupby(level=0).last()
+                panel[dst] = s_.reindex(idx).ffill(limit=30)
+    if "derived.export_uv" in panel and "fx.usdcny" in panel:
+        panel["derived.export_uv_cny"] = panel["derived.export_uv"] * panel["fx.usdcny"].ffill()
     observed = disp[TARGET].index if TARGET in disp else None
     return Dataset(panel, disp, ev, cap, inflections.detect(panel[TARGET], observed=observed), time_axis, unk)
 

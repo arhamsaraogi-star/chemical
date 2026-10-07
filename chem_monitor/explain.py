@@ -91,10 +91,10 @@ def block_explanations(P: pd.DataFrame, blocks: dict, events: pd.DataFrame, cap:
     if len(rq):
         lr = _last_real(rq)
         q3, q12 = _chg(rq, 91, lr), _chg(rq, 365, lr)
-        add("DOWNSTREAM", f"Six big dyeing countries imported {rq.asof(lr):,.0f} t of Chinese reactive dye in "
-                          f"{lr:%b %Y} ({_pct(q3)} vs three months earlier, {_pct(q12)} vs a year earlier) - "
+        add("DOWNSTREAM", f"Chinese reactive-dye shipments to dyeing countries that report imports (like-for-like) "
+                          f"changed {_pct(q3)} over three months and {_pct(q12)} over a year to {lr:%b %Y} - "
                           f"a sign of demand for the dyes H-Acid goes into.",
-            "observed", {"rdye_t": float(rq.asof(lr)), "rdye_3m": q3, "rdye_12m": q12, "month": f"{lr:%Y-%m}"})
+            "derived", {"rdye_t": 1.0, "rdye_3m": q3, "rdye_12m": q12, "month": f"{lr:%Y-%m}"})
     elif len(dye) >= 2 and dye.index[-1] - dye.index[0] > pd.Timedelta(days=60):
         add("DOWNSTREAM", f"Reactive dye was ¥{dye.iloc[-1] / 1000:.0f}/kg at the last observation, versus "
                           f"¥{dye.iloc[0] / 1000:.0f}/kg on {dye.index[0]:%d %b %Y}. Too few observations to score yet.",

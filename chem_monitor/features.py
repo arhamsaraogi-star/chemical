@@ -69,6 +69,40 @@ def _mirror_uv(panel, tag):
     return (val / qty.replace(0, np.nan)).where(has), qty.where(has)
 
 
+def mirror_chain(obs: pd.DataFrame, tag: str, date_col: str = "obs_date"):
+    """Like-for-like aggregates of importer-reported trade with China (HS tag 'hacid' / 'rdye').
+    Countries report with different lags, so a plain sum jumps when a reporter is missing. Each month's
+    change is computed only over reporters present in BOTH months, then chained:
+      qty_index  (=100 at the first month)   unit value (USD/t, anchored at the first month's actual value)
+    Built from raw monthly records (no carry-forward), placed on `date_col` (economic or known date)."""
+    d = obs[obs["series"].astype(str).str.match(rf"mirror\.\w+\.{tag}\.(qty|value)$")].dropna(subset=[date_col])
+    if d.empty:
+        return None
+    d = d.assign(rep=d["series"].str.split(".").str[1], kind=d["series"].str.split(".").str[-1],
+                 month=d["obs_date"].dt.to_period("M"))
+    q = d[d.kind == "qty"].pivot_table(index="month", columns="rep", values="value", aggfunc="last")
+    v = d[d.kind == "value"].pivot_table(index="month", columns="rep", values="value", aggfunc="last").reindex_like(q)
+    when = d.groupby("month")[date_col].max()
+    rows, qi, uv, prev = [], 100.0, None, None
+    for m in q.index:
+        cur = q.loc[m].dropna()
+        cur = cur[cur > 0]
+        if prev is None:
+            uv = float(v.loc[m, cur.index].sum() / cur.sum()) if len(cur) else np.nan
+        else:
+            common = [r for r in cur.index if r in prev.index and pd.notna(v.loc[m, r]) and pd.notna(v.loc[prev.name, r])]
+            if common:
+                q0, q1 = q.loc[prev.name, common].sum(), q.loc[m, common].sum()
+                u0 = v.loc[prev.name, common].sum() / q0
+                u1 = v.loc[m, common].sum() / q1
+                qi, uv = qi * q1 / q0, uv * u1 / u0
+        rows.append((when.loc[m], qi, uv, len(cur)))
+        prev = q.loc[m].dropna()
+        prev.name = m
+    out = pd.DataFrame(rows, columns=["date", "qty_index", "uv", "n_reporters"]).set_index("date")
+    return out
+
+
 def export_unit_value(panel: pd.DataFrame):
     """USD per tonne. H-Acid (HS 292221): importer-reported (mirror) imports from China summed over the
     reporting destinations, because China's own monthly reporting stops in Dec 2024. Reactive dyes
