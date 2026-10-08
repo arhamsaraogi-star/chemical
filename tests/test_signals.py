@@ -147,6 +147,9 @@ def test_notify_only_reports_changes():
     new = {**base, "price": {"value": 156000, "date": "2026-10-08"}, "live": {"state": "WATCH", "score": 31}}
     t = digest(base, new, [], [{"name": "Baiinfo", "collector_status": "failed"}], "u")
     assert "¥156,000" in t and "+4.0%" in t and "NORMAL → **WATCH**" in t and "Baiinfo failed" in t
+    quiet = [{"name": "Baiinfo", "collector_status": "stale", "age_days": 8}]
+    assert digest(base, base, [], quiet, "u") == ""                       # a holiday lull alone posts nothing
+    assert "Baiinfo (8 days)" in digest(base, new, [], quiet, "u")
 
 
 def test_mirror_chain_is_like_for_like():

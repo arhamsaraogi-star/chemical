@@ -37,11 +37,17 @@ def digest(old: dict, new: dict, infl: list, sources: list, site_url: str) -> st
              if od and od.get(t["block"]) != t["word"]]
     if moved:
         lines.append("- **Drivers changed:** " + "; ".join(moved) + ".")
-    bad = [s["name"].split(" - ")[0].split(" (")[0] for s in sources if s.get("collector_status") in ("failed", "stale")]
-    if bad:
-        lines.append(f"- **Data warning:** {', '.join(sorted(set(bad)))} failed or is stale (previous data kept).")
-    if not lines:
+    def short(s):
+        return s["name"].split(" - ")[0].split(" (")[0]
+    failed = sorted({short(s) for s in sources if s.get("collector_status") == "failed"})
+    if failed:
+        lines.append(f"- **Data warning:** {', '.join(failed)} failed (previous data kept).")
+    if not lines:                                      # a quiet source (e.g. a holiday) alone is not news
         return ""
+    stale = sorted({f"{short(s)} ({s['age_days']} days)" for s in sources
+                    if s.get("collector_status") == "stale" and s.get("age_days") is not None})
+    if stale:
+        lines.append(f"- **No new data yet from:** {', '.join(stale)}.")
     head = new.get("headline") or ""
     return "\n".join([f"**H-Acid update — {new.get('generated_at', '')}**", "", head, ""] + lines +
                      ["", f"[Open the monitor]({site_url})"])
