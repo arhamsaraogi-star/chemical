@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chemical Cycle Monitor</title>
+<meta name="description" content="Open, point-in-time research monitor for Chinese chemical price cycles. H-Acid first: price, supply events, feedstocks, trade, inflection forensics - every number traceable to a source.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 12 L5 8 L8 10 L15 3' fill='none' stroke='%232a78d6' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main id="main"><div class="skeleton">Loading…</div></main>
+<footer>
+  <div>Chemical Cycle Monitor · an open research instrument, not investment advice. Prices are third-party data cited with provenance; check each source's terms before reuse.</div>
+  <div style="margin-top:4px"><a href="https://github.com/arhamsaraogi-star/chemical">Source code &amp; data on GitHub</a> · <a href="#/methodology">Methodology</a> · <a href="#/sources">Sources</a></div>
+</footer>
+
+<template id="tpl-methodology">
+<div class="prose">
+  <div class="kicker">Methodology</div>
+  <h1 style="color:var(--ink)">How the monitor works</h1>
+  <p>The monitor answers one question: <em>what is happening to H-Acid prices in China, why, and is a genuine chemical-cycle inflection developing?</em> Everything is deterministic and reproducible from the CSV files in the repository. No machine learning or AI is used for prices, scores, statistics or backtests.</p>
+
+  <h2>1. Five kinds of number</h2>
+  <ul>
+    <li><span class="kind observed">observed</span> a value printed by a source (e.g. "Baiinfo market average ¥150,000/t on 30 Sep").</li>
+    <li><span class="kind derived">derived</span> arithmetic on observed values (20-day change, unit value, previous-day price implied by a stated daily change).</li>
+    <li><span class="kind estimated">estimated</span> uses a stated assumption (onset windows; availability of a plant in "trial" status; trade-data publication lag).</li>
+    <li><span class="kind inferred">inferred</span> a rule-based judgement (primary driver, "supply tightening").</li>
+    <li><span class="kind ai_extracted">ai-extracted</span> reserved for future machine-assisted Chinese-text extraction; always kept with the original text and URL. Currently none.</li>
+  </ul>
+
+  <h2>2. How the price is constructed</h2>
+  <p>Each source is kept as its own series and source family. Where several families report the same series on the same date, the master value is a tier- and confidence-weighted median; sources that republish the same original (e.g. news quoting Baiinfo) share one vote. Spot/market averages, producer ex-works quotes, export unit values and dye prices are never merged. Between observations the last value is carried forward (a step line) for at most 45 business days; longer gaps are left unobserved and drawn dashed.</p>
+
+  <h2>3. Point-in-time (two clocks)</h2>
+  <p>Every record has an <b>economic date</b> (when it happened) and an <b>information date</b> (when it was published). <code>known_date = max(economic, information)</code>. Historical forensics use the economic clock; anything that pretends to be live - the score, alerts and the detection backtest - uses the information clock and sees a record only from its publication date. Vintage status is <b>confirmed</b> (source gives the date), <b>estimated</b> (explicit, labelled lag assumption) or <b>unknown</b>. Unknown-vintage records are excluded from point-in-time work. Tests prove that rebuilding the score with data cut at date T reproduces the full-history score at T exactly.</p>
+
+  <h2>4. How inflections are detected</h2>
+  <p>A move triggers when the H-Acid price changes by ≥5% in 5 business days, ≥10% in 20 or ≥20% in 60. Triggers within 20 business days form one episode. The <b>price onset</b> is the last date the price was still near its prior extreme (within 25% of the subsequent move); the <b>plausible window</b> spans the onset under 10%/25%/40% bands and the real observations that bracket it - with sparse data the move happened somewhere between two observations, and the window says so. Onsets are never called exact unless the window has zero width.</p>
+  <p>The <b>fundamental onset</b> is the earliest supporting supply/policy event (economic date, widened by its stated precision) or fundamental signal turn within 120 days before the price onset; its <b>public date</b> is when that evidence was announced. <b>System detection</b> is the first date the point-in-time score reached the alert threshold in the move's direction. <b>Detection lead</b> = price-rule trigger − system detection.</p>
+  <p><b>False breakouts</b> are identified in hindsight only: if more than half of the move retraced within 30 days of its end it is labelled <i>false_breakout</i>. This label never feeds the live score.</p>
+
+  <h2>5. Signal blocks and the score</h2>
+  <p>Ten components (price momentum and acceleration, producer quotes, capacity availability, utilisation, inventory, feedstock index, downstream dyes, export unit value, event pressure) are each converted to an expanding percentile in [−1, +1] using only past data. Components are averaged <b>inside</b> their block - PRICE, SUPPLY, DEMAND, COST, INVENTORY, DOWNSTREAM, TRADE, EVENTS - so the H-Acid price and producer quotes, which are the same move, count once. Blocks are combined with fixed, published weights (PRICE 30%, SUPPLY 20%, COST 15%, INVENTORY 10%, DOWNSTREAM 10%, DEMAND 5%, TRADE 5%, EVENTS 5%). Within-block weights are refitted every 60 business days using only forward-return labels that had already matured.</p>
+  <p>Score = |pressure| × 100. The state is a pure function of the score: 0–24 NORMAL, 25–49 WATCH, 50–69 DEVELOPING, 70–84 STRONG, 85–100 MAJOR. If less than 70% of the configured block weight has data, the state is capped at WATCH. The driver ("supply tightening") is reported separately from confidence, and a NORMAL state is never described as an inflection.</p>
+  <p><b>Confirmation</b> counts non-price blocks that agree with the direction by ≥0.2 - "k / n independent information families". <b>Evidence confidence</b> (High/Medium/Low) combines confirmation, coverage and data quality.</p>
+
+  <h2>6. Events</h2>
+  <p>Event pressure decays with a 30-day half-life, scaled by severity and, where capacity is known, by share of known capacity. The dashboard shows the <i>last known event</i> separately from the <i>current residual pressure</i>; an event whose pressure has decayed below 0.10 is no longer called active.</p>
+
+  <h2>7. Lead/lag and hit rates</h2>
+  <p>Lead/lag correlations are computed on a shared weekly grid (changes in X at t−L vs the price at t). Hit rate = share of inflections preceded within L days by a ≥1σ move of the indicator in the right direction; lift = hit rate ÷ base rate on random dates. Every statistic shows its sample size: N &lt; 10 is <i>exploratory only</i>, 10–29 <i>indicative</i>, ≥30 <i>statistically meaningful</i>. A 100% hit rate on N = 4 means nothing.</p>
+
+  <h2>8. Historical analogues</h2>
+  <p>The current block fingerprint is compared (cosine similarity) with the fingerprint in the 14 days before each <i>earlier, completed</i> inflection. ≥80% strong, 65–80% moderate, 50–65% weak, &lt;50% none. Below 65% the site shows "No strong historical analogue" rather than forcing one.</p>
+
+  <h2>9. Feedstocks, supply, trade - what is and is not modelled</h2>
+  <ul>
+    <li><b>Feedstock index</b>: chain-linked, equal-weighted index of refined naphthalene, sulfuric acid, nitric acid and caustic soda. Equal weights are used because no sourced production coefficients are available; it is a price index, not a cost of production.</li>
+    <li><b>Supply</b>: nominal capacity × availability for the producers we can document. No producer publishes utilisation, so availability for trial/reduced/disrupted status is an explicit assumption (50%) and is labelled <span class="kind estimated">estimated</span>.</li>
+    <li><b>Inventory</b>: no reliable public series exists - shown as unavailable; nothing synthetic is used.</li>
+    <li><b>Trade</b>: HS 292221 (H-Acid dominated; also J-acid, γ-acid). China's monthly Comtrade reporting stops in Dec 2024, so imports from China reported by India, Korea and Indonesia (mirror data) carry the signal. Unit value is never presented as a spot price.</li>
+  </ul>
+
+  <h2>10. Failure handling</h2>
+  <p>Collectors run twice each weekday on GitHub Actions. Each run validates rows (dates, ranges, jumps &gt;3×, publication before observation) before merging; a failing source never overwrites stored data, and its status, last success and failure reason are published on the Data quality page. Tests run before any deploy.</p>
+</div>
+</template>
+
+<template id="tpl-about">
+<div class="prose">
+  <div class="kicker">About</div>
+  <h1 style="color:var(--ink)">Chemical Cycle Monitor</h1>
+  <p>A public, open-source research instrument for Chinese chemical price cycles. H-Acid (1-amino-8-naphthol-3,6-disulfonic acid, CAS 90-20-0) - the key coupling component of reactive dyes - is the reference implementation; further chemicals will be added only after H-Acid's data layer is validated.</p>
+  <h2>Architecture</h2>
+  <p>GitHub repository = source code + historical data (CSV, git-versioned) + automated pipeline + this static site. A scheduled GitHub Action collects data, validates it, recomputes the analytics, runs the tests and publishes JSON that this page reads. There is no server, no login and no tracking.</p>
+  <h2>Limitations</h2>
+  <ul>
+    <li>Historical H-Acid prices before live collection are sparse: they come from Baiinfo/SCI99 figures cited in dated news and broker notes. Paid databases (Baiinfo members area, SunSirs) are not used.</li>
+    <li>The number of historical inflections is small, so every statistic is exploratory.</li>
+    <li>Capacity and producer status come from company statements and broker notes, not audits.</li>
+  </ul>
+  <h2>Disclaimer</h2>
+  <p>For research and education. Not investment advice. Data belongs to its publishers and is cited with links; verify against the original before relying on it.</p>
+  <p><a href="https://github.com/arhamsaraogi-star/chemical">github.com/arhamsaraogi-star/chemical</a> · Charts drawn with plain SVG.</p>
+</div>
+</template>
+
+<script src="assets/chart.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
