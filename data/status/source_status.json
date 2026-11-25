@@ -1,25 +1,25 @@
 {
   "baiinfo_public": {
     "failure_reason": null,
-    "last_attempt": "2026-11-24T20:50:23Z",
-    "last_observation_date": "2026-11-24",
-    "last_success": "2026-11-24T20:50:23Z",
+    "last_attempt": "2026-11-25T11:39:05Z",
+    "last_observation_date": "2026-11-25",
+    "last_success": "2026-11-25T11:39:05Z",
     "mode": "live",
     "rows_fetched": 5,
-    "rows_new": 0,
+    "rows_new": 5,
     "rows_rejected": [],
     "rows_revised": 0,
-    "rows_total": 213,
+    "rows_total": 218,
     "status": "partial",
     "warnings": [
-      "feed.naphthalene_industrial: note not found / unparseable"
+      "feed.naphthalene_refined: note not found / unparseable"
     ]
   },
   "comtrade": {
     "failure_reason": null,
-    "last_attempt": "2026-11-24T20:51:29Z",
+    "last_attempt": "2026-11-25T11:40:11Z",
     "last_observation_date": "2026-08-31",
-    "last_success": "2026-11-24T20:51:29Z",
+    "last_success": "2026-11-25T11:40:11Z",
     "mode": "live",
     "rows_fetched": 56,
     "rows_new": 0,
@@ -34,12 +34,12 @@
   },
   "ecb_fx": {
     "failure_reason": null,
-    "last_attempt": "2026-11-24T20:59:10Z",
+    "last_attempt": "2026-11-25T11:57:17Z",
     "last_observation_date": "2026-11-24",
-    "last_success": "2026-11-24T20:59:10Z",
+    "last_success": "2026-11-25T11:57:17Z",
     "mode": "live",
-    "rows_fetched": 29,
-    "rows_new": 1,
+    "rows_fetched": 28,
+    "rows_new": 0,
     "rows_rejected": [],
     "rows_revised": 0,
     "rows_total": 996,
@@ -48,9 +48,9 @@
   },
   "nbs_10day": {
     "failure_reason": null,
-    "last_attempt": "2026-11-24T20:50:55Z",
+    "last_attempt": "2026-11-25T11:39:36Z",
     "last_observation_date": "2026-11-20",
-    "last_success": "2026-11-24T20:50:55Z",
+    "last_success": "2026-11-25T11:39:36Z",
     "mode": "live",
     "rows_fetched": 12,
     "rows_new": 0,
